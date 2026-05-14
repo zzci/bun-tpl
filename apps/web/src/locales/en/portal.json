@@ -1,0 +1,11 @@
+{
+  "page": {
+    "title": "Portal",
+    "description": "Welcome to your workspace."
+  },
+  "welcome": "Welcome, {{name}}",
+  "tile": {
+    "myIssuesDescription": "View and manage your issues.",
+    "documentsDescription": "Browse and edit documents."
+  }
+}

@@ -1,0 +1,28 @@
+{
+  "create": "Create Group",
+  "createTitle": "Create Group",
+  "createDescription": "Add a new user group.",
+  "editTitle": "Edit Group",
+  "editDescription": "Update group name and description.",
+  "deleteTitle": "Delete Group",
+  "deleteConfirm": "Are you sure you want to delete the group \"{{name}}\"? This action cannot be undone.",
+  "noResults": "No groups yet.",
+  "noMembers": "No members in this group.",
+  "addMember": "Add Member",
+  "addMemberTitle": "Add Member",
+  "addMemberDescription": "Search for a user to add to this group.",
+  "searchUserPlaceholder": "Search users...",
+  "removeMember": "Remove member",
+  "membersOf": "Members of {{name}}",
+  "col": {
+    "name": "Name",
+    "members": "Members",
+    "actions": "Actions",
+    "memberName": "Name",
+    "memberEmail": "Email"
+  },
+  "field": {
+    "name": "Group Name",
+    "description": "Description"
+  }
+}

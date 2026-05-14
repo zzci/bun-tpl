@@ -1,0 +1,127 @@
+{
+  "page": {
+    "title": "系统设置",
+    "description": "管理身份认证、邮件、Webhook 和其他平台配置。"
+  },
+  "profile": {
+    "username": "用户名",
+    "email": "邮箱",
+    "role": "角色",
+    "groups": "用户组",
+    "roleAdmin": "管理员",
+    "roleUser": "普通用户"
+  },
+  "tabProfile": "个人资料",
+  "tabSecurity": "安全",
+  "language": "语言",
+  "theme": "外观",
+  "saving": "保存中...",
+  "col": {
+    "actions": "操作"
+  },
+  "tabs": {
+    "auth": "身份认证",
+    "smtp": "SMTP",
+    "webhook": "Webhook",
+    "encryption": "加密与备份"
+  },
+  "encryption": {
+    "title": "加密与备份",
+    "description": "管理数据库加密和数据备份。",
+    "changePassword": "修改主密码",
+    "currentPassword": "当前密码",
+    "currentPasswordPlaceholder": "输入当前密码",
+    "newPassword": "新密码",
+    "newPasswordPlaceholder": "输入新密码（至少 12 位）",
+    "confirmPassword": "确认新密码",
+    "confirmPasswordPlaceholder": "再次输入新密码",
+    "changeButton": "修改密码",
+    "wrongPassword": "当前密码不正确。",
+    "confirmTitle": "确认修改主密码？",
+    "confirmDescription": "此操作将修改加密主密码。下次重启后需要使用新密码解锁系统，请务必妥善保存。",
+    "confirmButton": "确认修改",
+    "changeSuccess": "主密码修改成功。下次重启时请使用新密码。",
+    "changeNote": "修改密码会使用新派生的密钥对重新加密数据库密钥。数据库本身不会重新加密。下次解锁时生效。",
+    "changeFailed": "修改密码失败",
+    "disabled": "数据库加密已禁用（DB_ENCRYPTION=false）。此模式下不能修改加密设置。",
+    "export": {
+      "title": "数据导出",
+      "description": "将所选模块导出为 JSON 备份文件。审计日志、会话及临时数据不会被导出。",
+      "button": "导出数据库",
+      "selectModules": "选择模块",
+      "password": "主密码",
+      "passwordPlaceholder": "输入主密码以验证身份",
+      "wrongPassword": "密码不正确。",
+      "exporting": "导出中...",
+      "success": "数据库导出成功。",
+      "failed": "导出失败",
+      "noEncryption": "将所选模块导出为 JSON 备份文件。审计日志、会话及临时数据不会被导出。",
+      "confirmTitle": "确认导出数据库？",
+      "confirmDescription": "将生成并下载所选模块的 JSON 备份。审计日志及会话数据不会包含在内。",
+      "confirmButton": "确认导出"
+    },
+    "import": {
+      "title": "数据导入",
+      "description": "从之前导出的 JSON 备份文件导入数据。此操作将覆盖相关模块的现有数据。",
+      "button": "导入数据库",
+      "file": "备份文件",
+      "detectedModules": "文件中包含的模块",
+      "password": "主密码",
+      "passwordPlaceholder": "输入主密码以验证身份",
+      "wrongPassword": "密码不正确。",
+      "importing": "导入中...",
+      "success": "导入完成。共 {{tables}} 张表，{{rows}} 行数据。",
+      "failed": "导入失败",
+      "invalidFormat": "备份文件格式无效。",
+      "invalidJson": "文件不是有效的 JSON。",
+      "confirmTitle": "确认导入数据库？",
+      "confirmDescription": "这是一个破坏性操作。以下模块中的现有数据将被导入的数据替换：",
+      "confirmButton": "确认导入",
+      "includeUsersLabel": "同时恢复用户、用户组与偏好",
+      "confirmIncludeUsersOn": "用户、用户组、偏好将被覆盖。",
+      "confirmIncludeUsersOff": "用户、用户组、偏好将被跳过。"
+    },
+    "modules": {
+      "users": "用户与用户组",
+      "policies": "策略",
+      "documents": "文档",
+      "issues": "事项",
+      "settings": "配置"
+    }
+  },
+  "auth": {
+    "sessionTitle": "会话与管理员",
+    "sessionDescription": "配置会话时长和默认管理员。",
+    "fieldSessionMaxAge": "会话有效期（秒）"
+  },
+  "smtp": {
+    "title": "邮件（SMTP）",
+    "description": "配置用于发送通知邮件的 SMTP 服务器。",
+    "enable": "启用",
+    "serverConfig": "SMTP 服务器",
+    "fieldHost": "SMTP 主机",
+    "fieldPort": "端口",
+    "fieldUsername": "用户名",
+    "fieldPassword": "密码",
+    "fieldFromAddress": "发件地址",
+    "fieldFromName": "发件人名称"
+  },
+  "webhook": {
+    "title": "Webhook",
+    "description": "配置用于接收事件通知的 Webhook 地址。",
+    "add": "添加 Webhook",
+    "addTitle": "添加 Webhook",
+    "addDescription": "配置一个新的 Webhook 地址。",
+    "noWebhooks": "尚未配置 Webhook。点击「添加 Webhook」开始使用。",
+    "colName": "名称",
+    "colUrl": "地址",
+    "colEvents": "事件",
+    "colSecret": "密钥",
+    "fieldSecret": "签名密钥",
+    "secretPlaceholder": "可选的签名密钥",
+    "allEvents": "所有事件",
+    "noSecret": "无",
+    "eventsHint": "以逗号分隔的事件类型，或 * 表示所有事件。",
+    "allEventsPlaceholder": "*（所有事件）"
+  }
+}

@@ -1,0 +1,71 @@
+{
+  "page": {
+    "title": "我的文档",
+    "description": "创建和管理您的文档。"
+  },
+  "create": "创建文档",
+  "createTitle": "创建文档",
+  "createDescription": "创建一个新文档。",
+  "editTitle": "编辑文档",
+  "editDescription": "更新文档详情。",
+  "deleteTitle": "删除文档",
+  "deleteConfirm": "确定要删除文档「{{title}}」吗？此操作无法撤销。",
+  "searchPlaceholder": "按标题或内容搜索...",
+  "tagsPlaceholder": "添加标签...",
+  "totalCount": "{{count}} 个文档",
+  "noResults": "未找到文档。",
+  "selectToView": "请选择一个文档查看",
+  "col": {
+    "title": "标题",
+    "creator": "创建人",
+    "createdAt": "创建时间",
+    "actions": "操作"
+  },
+  "field": {
+    "title": "标题",
+    "contentPlaceholder": "开始编写您的文档..."
+  },
+  "comments": {
+    "title": "评论",
+    "placeholder": "输入评论...",
+    "send": "发送",
+    "noComments": "暂无评论。",
+    "deleteTitle": "删除评论",
+    "deleteConfirm": "确定要删除此评论吗？",
+    "lock": "锁定评论",
+    "unlock": "解锁评论",
+    "lockedNotice": "此文档的评论已被锁定，暂不接受新评论。",
+    "justNow": "刚刚",
+    "minutesAgo": "{{count}} 分钟前",
+    "hoursAgo": "{{count}} 小时前",
+    "daysAgo": "{{count}} 天前",
+    "reply": "回复",
+    "replyingTo": "回复给",
+    "replyMissing": "原评论已删除"
+  },
+  "attachments": {
+    "title": "附件",
+    "upload": "添加附件",
+    "uploading": "上传中...",
+    "download": "下载",
+    "deleteTitle": "删除附件",
+    "deleteConfirm": "确定要删除附件「{{filename}}」吗？",
+    "limitReached": "已达到附件数量上限（20 个）。",
+    "fileTooLarge": "文件大小超过限制。",
+    "fileTooLargeNamed": "文件大小超过限制：{{names}}"
+  },
+  "share": "分享",
+  "shareTitle": "分享文档",
+  "shareDescription": "管理此文档的分享权限。",
+  "addShare": "添加",
+  "viewer": "查看者",
+  "editor": "编辑者",
+  "targetUser": "用户",
+  "targetGroup": "用户组",
+  "noShares": "尚未分享。",
+  "inheritedFrom": "继承自「{{title}}」",
+  "inheritedNotRemovable": "继承的分享只能在来源文档中移除",
+  "tree": {
+    "newChild": "新建子文档"
+  }
+}

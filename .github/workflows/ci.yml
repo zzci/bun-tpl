@@ -1,0 +1,186 @@
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+# Cancel in-flight runs for the same PR; never cancel main pushes.
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+permissions:
+  contents: read
+
+env:
+  # Pin tool versions explicitly so a bun/node minor upgrade is a deliberate
+  # PR, not a silent main-branch breakage. Renovate/dependabot can bump.
+  BUN_VERSION: "1.3.14"
+  NODE_VERSION: "22.13.0"
+
+jobs:
+  check:
+    name: lint + typecheck + test + build + docs-drift
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: ${{ env.BUN_VERSION }}
+
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
+
+      # Single source of truth — matches `package.json`'s `check` script so a
+      # green local run is a green CI run. Bundles lint + typecheck + test +
+      # build + check:i18n + check:env-docs + check:api-docs.
+      - name: Check
+        run: bun run check
+
+      - name: Upload coverage
+        if: matrix.os == 'ubuntu-latest'
+        uses: actions/upload-artifact@v7
+        with:
+          name: coverage-${{ github.run_id }}
+          path: apps/api/coverage/
+          if-no-files-found: ignore
+          retention-days: 14
+
+  security:
+    name: security scans
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read
+      security-events: write
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0  # trufflehog walks history for past commits
+
+      - name: trufflehog (secrets)
+        uses: trufflesecurity/trufflehog@v3.95.3
+        with:
+          # Scan the working tree (filesystem mode) so the action stays
+          # agnostic to PR vs push events; --only-verified caps the
+          # noise to credentials trufflehog could actively authenticate
+          # with against the originating service.
+          extra_args: --results=verified,unknown
+
+      - name: osv-scanner (dependency CVEs)
+        uses: google/osv-scanner-action/osv-scanner-action@v2.3.8
+        with:
+          scan-args: |-
+            --lockfile=bun.lock
+
+  dependency-review:
+    name: dependency review (PR only)
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      pull-requests: write
+    steps:
+      - uses: actions/checkout@v6
+      - name: Dependency Review
+        uses: actions/dependency-review-action@v4
+        with:
+          fail-on-severity: high
+          comment-summary-in-pr: on-failure
+
+  codeql:
+    name: codeql (javascript-typescript)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: read
+      security-events: write
+    steps:
+      - uses: actions/checkout@v6
+      - uses: github/codeql-action/init@v3
+        with:
+          languages: javascript-typescript
+          queries: security-extended
+      - uses: github/codeql-action/analyze@v3
+        with:
+          category: "/language:javascript-typescript"
+
+  docker:
+    name: docker build
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    permissions:
+      contents: read
+      security-events: write
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: docker/setup-buildx-action@v4
+
+      - name: Build image (no push)
+        uses: docker/build-push-action@v7
+        with:
+          context: .
+          push: false
+          load: true
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+          tags: app:ci-${{ github.sha }}
+
+      - name: trivy (built image CVEs)
+        uses: aquasecurity/trivy-action@v0.36.0
+        with:
+          image-ref: app:ci-${{ github.sha }}
+          severity: HIGH,CRITICAL
+          exit-code: "1"
+          ignore-unfixed: true
+          format: sarif
+          output: trivy-image.sarif
+
+      - name: Upload Trivy results
+        if: always()
+        uses: github/codeql-action/upload-sarif@v3
+        with:
+          sarif_file: trivy-image.sarif
+
+  e2e:
+    name: e2e (dex + api)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: ${{ env.BUN_VERSION }}
+
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
+
+      - name: Run e2e suite
+        run: bun run test:e2e
+
+      - name: Upload e2e reports
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: e2e-reports-${{ github.run_id }}
+          path: tests/e2e/.cache/reports/
+          if-no-files-found: ignore
+          retention-days: 14

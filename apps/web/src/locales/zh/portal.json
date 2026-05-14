@@ -1,0 +1,11 @@
+{
+  "page": {
+    "title": "门户",
+    "description": "欢迎回到工作台。"
+  },
+  "welcome": "欢迎回来，{{name}}",
+  "tile": {
+    "myIssuesDescription": "查看和管理您的事项。",
+    "documentsDescription": "浏览和编辑文档。"
+  }
+}
