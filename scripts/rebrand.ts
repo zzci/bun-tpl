@@ -199,6 +199,64 @@ function rewriteDockerfile(): void {
 }
 rewriteDockerfile();
 
+// ─── 1d. Source fallback literals ───
+// `rebrand.ts` rewrites .env so a fork's *runtime* APP_NAME is correct,
+// but two dev scripts and the config schema hard-code `"app"` / `"App"`
+// as the last-resort fallback used when the env var is unset (commented
+// .env, CI without .env, `bun run dev:dex` before the operator edits
+// .env). Without this step a freshly rebranded fork still prints / serves
+// the template slug from those paths. Match only the exact template
+// literal so a fork that already customised the fallback by hand survives.
+function rewriteSourceFallbacks(): void {
+  if (APP_NAME === undefined && APP_DISPLAY === undefined)
+    return;
+
+  // dev scripts: `process.env.APP_NAME ?? "app"`
+  if (APP_NAME !== undefined) {
+    for (const rel of ["scripts/dev-dex.ts", "scripts/dev-all.ts"]) {
+      let text: string;
+      try {
+        text = readFileSync(resolve(ROOT, rel), "utf-8");
+      }
+      catch {
+        continue;
+      }
+      const next = text.replace(
+        /(process\.env\.APP_NAME \?\? ")app(")/g,
+        `$1${APP_NAME}$2`,
+      );
+      if (next !== text)
+        write(rel, next, "rewrite APP_NAME fallback literal");
+    }
+  }
+
+  // config schema: APP_NAME `.default("app")` / APP_DISPLAY_NAME `.default("App")`
+  const schemaRel = "apps/api/src/config/schema.ts";
+  let schema: string;
+  try {
+    schema = readFileSync(resolve(ROOT, schemaRel), "utf-8");
+  }
+  catch {
+    return;
+  }
+  let nextSchema = schema;
+  if (APP_NAME !== undefined) {
+    nextSchema = nextSchema.replace(
+      /(APP_NAME: z\.string\(\)[^\n]*\.default\(")app("\))/,
+      `$1${APP_NAME}$2`,
+    );
+  }
+  if (APP_DISPLAY !== undefined) {
+    nextSchema = nextSchema.replace(
+      /(APP_DISPLAY_NAME: z\.string\(\)[^\n]*\.default\(")App("\))/,
+      `$1${APP_DISPLAY}$2`,
+    );
+  }
+  if (nextSchema !== schema)
+    write(schemaRel, nextSchema, "rewrite APP_NAME / APP_DISPLAY_NAME schema default");
+}
+rewriteSourceFallbacks();
+
 // ─── 2. package.json files ───
 const manifestGlobs = ["package.json", "apps/*/package.json", "packages/*/package.json"];
 const manifests: string[] = [];
