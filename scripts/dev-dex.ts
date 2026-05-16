@@ -6,13 +6,13 @@
  * Usage:
  *   bun run dev:dex                                    # auto-detect via nsl
  *   bun run dev:dex --issuer https://idp.example.com   # override public URL
- *   bun run dev:dex --access-url https://app.example.com
+ *   bun run dev:dex --app-url https://app.example.com
  *   bun run dev:dex --client-id myapp --client-secret xyz
  *
  * Note on issuer: OIDC pins the issuer string into every id_token, so a
  * single dex instance can serve only ONE issuer at a time. To use a
  * different URL (e.g. switch local HTTP ↔ external HTTPS), restart this
- * script with a different `--issuer` / `--access-url`. There is no way to
+ * script with a different `--issuer` / `--app-url`. There is no way to
  * make one dex instance answer for both URLs simultaneously.
  *
  * This script ONLY runs dex. Start the app separately with `bun run dev`
@@ -31,7 +31,7 @@ const { values: cli } = parseArgs({
   args: process.argv.slice(2),
   options: {
     "issuer": { type: "string" },
-    "access-url": { type: "string" },
+    "app-url": { type: "string" },
     "client-id": { type: "string" },
     "client-secret": { type: "string" },
     "admin": { type: "string" },
@@ -72,7 +72,7 @@ const DEX_URL_DEFAULT = nslGet(`dex-${APP_NAME}`) ?? "http://localhost:5567";
 // The dex issuer and the app's `OAUTH_ISSUER` must be identical (OIDC pins
 // the issuer into every id_token). Treat OAUTH_ISSUER as the canonical
 // source so one .env entry feeds both this script and the API.
-const ACCESS_URL = cli["access-url"] ?? process.env.ACCESS_URL ?? APP_URL_DEFAULT;
+const APP_URL = cli["app-url"] ?? process.env.APP_URL ?? APP_URL_DEFAULT;
 const DEX_ISSUER = cli.issuer ?? process.env.OAUTH_ISSUER ?? DEX_URL_DEFAULT;
 const OAUTH_CLIENT_ID = cli["client-id"] ?? process.env.OAUTH_CLIENT_ID ?? APP_NAME;
 const OAUTH_CLIENT_SECRET = cli["client-secret"] ?? process.env.OAUTH_CLIENT_SECRET ?? `${APP_NAME}-secret`;
@@ -110,7 +110,7 @@ staticClients:
   - id: ${OAUTH_CLIENT_ID}
     secret: ${OAUTH_CLIENT_SECRET}
     redirectURIs:
-      - ${ACCESS_URL}${BASE_PATH}/api/account/auth/callback
+      - ${APP_URL}${BASE_PATH}/api/account/auth/callback
     name: ${APP_NAME} dev
 enablePasswordDB: true
 staticPasswords:
@@ -179,7 +179,7 @@ console.log("[dev-dex] expected .env (matching values):");
 console.log(`            OAUTH_ISSUER=${DEX_ISSUER}`);
 console.log(`            OAUTH_CLIENT_ID=${OAUTH_CLIENT_ID}`);
 console.log(`            OAUTH_CLIENT_SECRET=${OAUTH_CLIENT_SECRET}`);
-console.log(`            ACCESS_URL=${ACCESS_URL}`);
+console.log(`            APP_URL=${APP_URL}`);
 console.log(`            DEFAULT_ADMIN=${DEFAULT_ADMIN}`);
 console.log("[dev-dex] run `bun run dev` in another terminal to start the app.");
 

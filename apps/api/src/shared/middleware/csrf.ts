@@ -48,12 +48,12 @@ export const csrfGuard = createMiddleware<AppEnv>(async (c, next) => {
     );
   }
 
-  // Build the allow-list from CORS_ORIGIN, falling back to ACCESS_URL's
+  // Build the allow-list from CORS_ORIGIN, falling back to APP_URL's
   // origin when CORS_ORIGIN is unset. Without this fallback the guard would
   // reduce to "X-Requested-With present" alone in single-origin deploys
   // (one host serves the SPA + API, CORS_ORIGIN intentionally unset).
   const config = c.get("config");
-  const allowed = buildAllowedOrigins(config.CORS_ORIGIN, config.ACCESS_URL);
+  const allowed = buildAllowedOrigins(config.CORS_ORIGIN, config.APP_URL);
   if (allowed.length > 0) {
     const origin = c.req.header("origin")
       ?? c.req.header("referer")?.match(RE_ORIGIN_FROM_REFERER)?.[0];
@@ -79,10 +79,10 @@ function originOf(url: string | undefined): string | undefined {
   }
 }
 
-function buildAllowedOrigins(corsOrigin: string | undefined, accessUrl: string | undefined): readonly string[] {
+function buildAllowedOrigins(corsOrigin: string | undefined, appUrl: string | undefined): readonly string[] {
   if (corsOrigin) {
     return corsOrigin.split(",").map(s => s.trim()).filter(Boolean);
   }
-  const fromAccessUrl = originOf(accessUrl);
-  return fromAccessUrl ? [fromAccessUrl] : [];
+  const fromAppUrl = originOf(appUrl);
+  return fromAppUrl ? [fromAppUrl] : [];
 }

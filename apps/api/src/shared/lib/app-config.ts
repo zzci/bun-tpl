@@ -112,7 +112,7 @@ export function getOidcLogoutUrl(config: Config): string | null {
 /**
  * Derive the origin (scheme + host) used to build OAuth callback URLs.
  *
- * - Production: `ACCESS_URL` is required (enforced at boot in `loadConfig`).
+ * - Production: `APP_URL` is required (enforced at boot in `loadConfig`).
  *   The runtime branch below is defense-in-depth in case the boot check is
  *   bypassed or this code is exercised from a test that injects a partial
  *   config; it should never fire on a properly-launched production process.
@@ -122,12 +122,12 @@ export function getOidcLogoutUrl(config: Config): string | null {
 const RE_TRAILING_SLASHES = /\/+$/;
 
 export function deriveOrigin(req: Request, config: Config): string {
-  if (config.ACCESS_URL) {
-    return config.ACCESS_URL.replace(RE_TRAILING_SLASHES, "");
+  if (config.APP_URL) {
+    return config.APP_URL.replace(RE_TRAILING_SLASHES, "");
   }
   if (config.NODE_ENV === "production") {
     throw new Error(
-      "ACCESS_URL must be set in production. Forwarded headers are not trusted in production to derive OAuth callback URLs.",
+      "APP_URL must be set in production. Forwarded headers are not trusted in production to derive OAuth callback URLs.",
     );
   }
   const url = new URL(req.url);

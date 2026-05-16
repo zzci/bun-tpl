@@ -71,7 +71,7 @@ function baseConfig(overrides: Partial<Config> = {}): Config {
     SINGLE_USER_PASSWORD_HASH_FILE: undefined,
     SINGLE_USER_NAME: undefined,
     SINGLE_USER_EMAIL: undefined,
-    ACCESS_URL: undefined,
+    APP_URL: undefined,
     OIDC_LOGOUT_URL: undefined,
     SERVICE_TOKEN_METRICS: undefined,
     SERVICE_TOKEN_BACKUP: undefined,

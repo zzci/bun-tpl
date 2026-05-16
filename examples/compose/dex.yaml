@@ -18,7 +18,7 @@ staticClients:
   - id: app
     secret: app-secret
     redirectURIs:
-      # Match BASE_PATH and ACCESS_URL. Update both sides if you change either.
+      # Match BASE_PATH and APP_URL. Update both sides if you change either.
       - http://localhost/app/api/account/auth/callback
     name: App
 enablePasswordDB: true

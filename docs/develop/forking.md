@@ -122,7 +122,7 @@ rg -i \
 BASE_PATH=/tools/myapp
 ```
 
-`BASE_PATH` accepts `myapp`, `/myapp`, or `/myapp/`; all three normalise to `/myapp`. The reverse proxy must mount the app at the same prefix and forward the `Host` header (or set `ACCESS_URL` to your public URL — required in production).
+`BASE_PATH` accepts `myapp`, `/myapp`, or `/myapp/`; all three normalise to `/myapp`. The reverse proxy must mount the app at the same prefix and forward the `Host` header (or set `APP_URL` to your public URL — required in production).
 
 ---
 

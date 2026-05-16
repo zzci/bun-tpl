@@ -4,10 +4,10 @@ import { describe, expect, test } from "bun:test";
 import { Hono } from "hono";
 import { csrfGuard } from "./csrf";
 
-function buildApp(corsOrigin?: string, accessUrl?: string) {
+function buildApp(corsOrigin?: string, appUrl?: string) {
   const app = new Hono<AppEnv>();
   app.use("*", async (c, next) => {
-    c.set("config", { CORS_ORIGIN: corsOrigin, ACCESS_URL: accessUrl } as Config);
+    c.set("config", { CORS_ORIGIN: corsOrigin, APP_URL: appUrl } as Config);
     return next();
   });
   app.use("*", csrfGuard);
@@ -43,13 +43,13 @@ describe("csrfGuard", () => {
     expect(res.status).toBe(403);
   });
 
-  test("with X-Requested-With and no CORS_ORIGIN / no ACCESS_URL configured: passes (dev fallback)", async () => {
+  test("with X-Requested-With and no CORS_ORIGIN / no APP_URL configured: passes (dev fallback)", async () => {
     const app = buildApp();
     const res = await app.request("/p", { method: "POST", headers: { "X-Requested-With": "XMLHttpRequest" } });
     expect(res.status).toBe(200);
   });
 
-  test("ACCESS_URL fallback: rejects when Origin does not match ACCESS_URL", async () => {
+  test("APP_URL fallback: rejects when Origin does not match APP_URL", async () => {
     const app = buildApp(undefined, "https://allowed.example.com");
     const res = await app.request("/p", {
       method: "POST",
@@ -58,7 +58,7 @@ describe("csrfGuard", () => {
     expect(res.status).toBe(403);
   });
 
-  test("ACCESS_URL fallback: accepts matching Origin when CORS_ORIGIN is unset", async () => {
+  test("APP_URL fallback: accepts matching Origin when CORS_ORIGIN is unset", async () => {
     const app = buildApp(undefined, "https://allowed.example.com");
     const res = await app.request("/p", {
       method: "POST",
@@ -67,13 +67,13 @@ describe("csrfGuard", () => {
     expect(res.status).toBe(200);
   });
 
-  test("ACCESS_URL fallback: rejects when neither Origin nor Referer is present", async () => {
+  test("APP_URL fallback: rejects when neither Origin nor Referer is present", async () => {
     const app = buildApp(undefined, "https://allowed.example.com");
     const res = await app.request("/p", { method: "POST", headers: { "X-Requested-With": "XMLHttpRequest" } });
     expect(res.status).toBe(403);
   });
 
-  test("CORS_ORIGIN takes precedence over ACCESS_URL", async () => {
+  test("CORS_ORIGIN takes precedence over APP_URL", async () => {
     const app = buildApp("https://cors.example.com", "https://access.example.com");
     const ok = await app.request("/p", {
       method: "POST",

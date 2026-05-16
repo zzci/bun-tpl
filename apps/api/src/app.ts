@@ -194,9 +194,9 @@ function buildOuterApp(api: Hono<AppEnv>, config: Config) {
   // SPA bundles are hashed under BASE_PATH; styles need 'unsafe-inline' for
   // Tailwind v4 + base-ui runtime style injection. img data:/blob: covers
   // QR codes and inline SVGs. frame-ancestors 'self' lets the SPA preview
-  // PDFs via same-origin <iframe>. HSTS auto-enables when ACCESS_URL is
+  // PDFs via same-origin <iframe>. HSTS auto-enables when APP_URL is
   // https — a direct deployment without a reverse proxy still gets it.
-  const hstsEnabled = config.ACCESS_URL?.startsWith("https://") ?? false;
+  const hstsEnabled = config.APP_URL?.startsWith("https://") ?? false;
   app.use("*", secureHeaders({
     referrerPolicy: "strict-origin-when-cross-origin",
     crossOriginOpenerPolicy: "same-origin",

@@ -35,7 +35,7 @@ services:
       DB_PATH: /app/data/db/app.db
       LOG_FILE: /app/data/logs/app.log
       DB_ENCRYPTION: ${DB_ENCRYPTION:-true}
-      ACCESS_URL: ${ACCESS_URL:-http://localhost}
+      APP_URL: ${APP_URL:-http://localhost}
       CORS_ORIGIN: ${CORS_ORIGIN:-http://localhost}
       OAUTH_ISSUER: ${OAUTH_ISSUER:-http://dex:5556/dex}
       OAUTH_CLIENT_ID: ${OAUTH_CLIENT_ID}

@@ -179,7 +179,7 @@ export const configSchema = z.object({
   SINGLE_USER_NAME: z.string().min(1).optional(),
   SINGLE_USER_EMAIL: z.string().email().optional(),
 
-  ACCESS_URL: z.string().url().optional(),
+  APP_URL: z.string().url().optional(),
   OIDC_LOGOUT_URL: z.string().url().optional(),
 
   // Bearer tokens for non-interactive tooling. Each scope is independent so

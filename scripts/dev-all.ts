@@ -56,7 +56,7 @@ if (dexBlockSealed()) {
   console.error("[dev-all] Edit .env and uncomment the \"Bundled dex IdP (local dev)\" block:");
   console.error("[dev-all]   OAUTH_ISSUER=http://dex-app.localhost:3355");
   console.error("[dev-all]   OAUTH_CLIENT_ID=app  OAUTH_CLIENT_SECRET=app-secret");
-  console.error("[dev-all]   ACCESS_URL=http://app.localhost:3355  DEFAULT_ADMIN=admin@example.com");
+  console.error("[dev-all]   APP_URL=http://app.localhost:3355  DEFAULT_ADMIN=admin@example.com");
   console.error("[dev-all] Or, to use an external IdP, configure OAUTH_* in .env and run `bun run dev`.");
   process.exit(1);
 }

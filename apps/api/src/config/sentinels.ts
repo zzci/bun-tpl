@@ -38,7 +38,7 @@ export function assertProductionSentinels(data: Config): void {
 
 /**
  * Production-only network boundary guards. Both fields are required
- * whenever OAuth is in play (the IdP needs ACCESS_URL to redirect
+ * whenever OAuth is in play (the IdP needs APP_URL to redirect
  * back; the CSRF guard needs CORS_ORIGIN to bound mutating
  * requests). Pure single-user deployments may legitimately omit
  * either — the warn-instead-of-throw branch covers that case.
@@ -54,15 +54,15 @@ export function assertProductionNetworkGuards(data: Config, oauthInPlay: boolean
   if (!data.CORS_ORIGIN && oauthInPlay) {
     throw new ConfigError("CORS_ORIGIN is required in production", { field: "CORS_ORIGIN" });
   }
-  if (!data.ACCESS_URL) {
+  if (!data.APP_URL) {
     if (oauthInPlay) {
       throw new ConfigError(
-        "ACCESS_URL is required in production (forwarded headers are not trusted to derive OAuth callback URLs).",
-        { field: "ACCESS_URL" },
+        "APP_URL is required in production (forwarded headers are not trusted to derive OAuth callback URLs).",
+        { field: "APP_URL" },
       );
     }
     return [
-      "[config] ACCESS_URL is unset in production single-user mode — the CSRF guard cannot enforce origin checks without it.",
+      "[config] APP_URL is unset in production single-user mode — the CSRF guard cannot enforce origin checks without it.",
     ];
   }
   return [];

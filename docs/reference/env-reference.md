@@ -7,9 +7,9 @@
 
 | Variable | Type | Default | Required | Description |
 |---|---|---|---|---|
-| `ACCESS_URL` | url | — | no | Public URL used to build OAuth callback URLs. REQUIRED in production: forwarded request headers are not trusted there. Optional in development: falls back to the inbound request's Host header. |
 | `APP_DISPLAY_NAME` | string | `App` | no | Human-readable display name. Shown in HTML title, TOTP issuer, etc. |
 | `APP_NAME` | string | `app` | no | Application slug — must match /^[a-z][a-z0-9-]*$/. Used as the backup filename prefix, localStorage namespace, and (via VITE_APP_NAME) the frontend build. |
+| `APP_URL` | url | — | no | Public URL used to build OAuth callback URLs. REQUIRED in production: forwarded request headers are not trusted there. Optional in development: falls back to the inbound request's Host header. |
 | `AUDIT_RETENTION_DAYS` | number | `0` | no | Audit retention in days. 0 = keep forever. The schema default is 0 to preserve "never sweep" semantics for the literal value, but production deployments should set a finite value so `audit_events` does not grow unbounded. 365 (one year) is a reasonable starting point. |
 | `BACKUP_EXPORT_MIN_INTERVAL_SECONDS` | number | `300` | no | Minimum seconds between successful service-token backup exports. Throttles a leaked backup token from being turned into a DOS lever (repeated full-DB reads amplify WAL pressure). 0 disables the gate. |
 | `BASE_PATH` | string | — | no | URL prefix the app is mounted under. Unset (default) means the app is served at root: SPA at "/" and API at "/api". When set, "app", "/app", and "/app/" all normalise to "/app" — SPA at "/app/", API at "/app/api". Match this with the reverse-proxy mount. |
@@ -35,7 +35,7 @@
 | `MASTER_PASSWORD_FILE` | string | — | no | Path to a single-use file containing the master password for unattended unlock. Mode must be 0600. The API reads the file at boot, POSTs to /api/encryption/unlock on loopback, then deletes the file. See docs/develop/operations.md § Sealed-file unlock. |
 | `MAX_ATTACHMENTS_PER_RESOURCE` | number | `20` | no | Per-resource attachment count cap. Defaults to 20. |
 | `MAX_UPLOAD_BYTES` | number | `10485760` | no | Per-file cap (bytes). Defaults to 10 MB. Applies to documents and issues. |
-| `NODE_ENV` | enum(development,production,test) | `development` | no | Deployment lifecycle. `development` enables hot dev paths; `production` turns on the stricter boot guards (CORS_ORIGIN + ACCESS_URL required, example-sentinel refusals); `test` is reserved for the e2e harness. |
+| `NODE_ENV` | enum(development,production,test) | `development` | no | Deployment lifecycle. `development` enables hot dev paths; `production` turns on the stricter boot guards (CORS_ORIGIN + APP_URL required, example-sentinel refusals); `test` is reserved for the e2e harness. |
 | `OAUTH_AUTHORIZE_URL` | url | — | no | Explicit endpoint overrides — only needed when the IdP does not expose OIDC discovery. Each must be a full HTTPS URL. Authorization endpoint the browser is redirected to to start login. |
 | `OAUTH_CLIENT_ID` | string | — | no | OAuth/OIDC is read from environment variables at runtime, not from the settings database. Use OAUTH_ISSUER for discovery or provide all endpoints. Client id registered at the IdP for this deployment. |
 | `OAUTH_CLIENT_SECRET` | string | — | no | Client secret. Keep out of public configuration management; pull from a secrets store and inject as env var at runtime. |

@@ -31,7 +31,7 @@ Highlights for a production deploy:
 | Variable | Why |
 |---|---|
 | `APP_NAME`, `APP_DISPLAY_NAME` | Branding (see [`forking.md`](forking.md)) |
-| `ACCESS_URL` | Production redirect-URI base; forwarded headers are not trusted in prod |
+| `APP_URL` | Production redirect-URI base; forwarded headers are not trusted in prod |
 | `CORS_ORIGIN` | Comma-separated allow-list; fail-closed in prod when unset |
 | `BASE_PATH` | URL prefix the app is mounted under. Leave unset for root mount; set to the reverse-proxy mount (e.g. `/app`) when serving under a prefix |
 | `DB_PATH`, `DB_ENCRYPTION` | Persistent volume for the DB; encryption defaults to off for dev — turn on in prod |
@@ -85,11 +85,11 @@ readinessProbe:
 
 ```bash
 cd examples/compose
-cp .env.example .env                # populate APP_NAME, secrets, ACCESS_URL, etc.
+cp .env.example .env                # populate APP_NAME, secrets, APP_URL, etc.
 docker compose up --build
 ```
 
-Required env (in `.env` next to the compose file): `APP_NAME`, `APP_DISPLAY_NAME`, `OAUTH_CLIENT_ID`, `OAUTH_CLIENT_SECRET`, `ACCESS_URL`. The bootstrap token gating `/api/encryption/init` is auto-generated at every boot and printed to stderr / written to `<data dir>/bootstrap-token.txt` while the system is in setup mode (no `meta.db` yet) — there is nothing to set in `.env`. Strip the `dex` service and replace it with your real IdP for any non-toy deploy.
+Required env (in `.env` next to the compose file): `APP_NAME`, `APP_DISPLAY_NAME`, `OAUTH_CLIENT_ID`, `OAUTH_CLIENT_SECRET`, `APP_URL`. The bootstrap token gating `/api/encryption/init` is auto-generated at every boot and printed to stderr / written to `<data dir>/bootstrap-token.txt` while the system is in setup mode (no `meta.db` yet) — there is nothing to set in `.env`. Strip the `dex` service and replace it with your real IdP for any non-toy deploy.
 
 ## Reverse proxy
 
@@ -105,7 +105,7 @@ your-domain.com {
 }
 ```
 
-Set `ACCESS_URL=https://your-domain.com` in the app's env so OAuth callback URLs are stable.
+Set `APP_URL=https://your-domain.com` in the app's env so OAuth callback URLs are stable.
 
 ### TLS via Caddy automatic HTTPS
 

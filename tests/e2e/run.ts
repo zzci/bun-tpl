@@ -103,7 +103,7 @@ function spawnApi(dataDir: string): Subprocess {
   const debug = process.env.E2E_DEBUG_API === "true";
   // The orchestrator owns the OAuth surface — it must speak to its own
   // fixture dex on DEX_BASE, not whatever IdP the developer's `.env`
-  // happens to point at. Strip OAUTH_* / ACCESS_URL out of process.env so
+  // happens to point at. Strip OAUTH_* / APP_URL out of process.env so
   // a split-horizon dev config (issuer = external HTTPS, endpoints =
   // local nsl) cannot leak into the test API process, then re-inject the
   // values the orchestrator wants. `OAUTH_ISSUER` alone drives discovery;
@@ -118,7 +118,7 @@ function spawnApi(dataDir: string): Subprocess {
     "OAUTH_TOKEN_URL",
     "OAUTH_USERINFO_URL",
     "OIDC_LOGOUT_URL",
-    "ACCESS_URL",
+    "APP_URL",
     "DEFAULT_ADMIN",
   ]);
   const cleanEnv: Record<string, string> = {};
@@ -142,7 +142,7 @@ function spawnApi(dataDir: string): Subprocess {
       LOG_LEVEL: "warn",
       LOG_FILE: join(dataDir, "api.log"),
       LOG_TO_STDOUT: "true",
-      ACCESS_URL: `http://127.0.0.1:${API_PORT}`,
+      APP_URL: `http://127.0.0.1:${API_PORT}`,
       // Set CORS_ORIGIN so csrfGuard's Origin check is exercised end-to-end.
       // The test client (lib/api.ts) injects a matching Origin header by
       // default; the security suite overrides it to test the mismatch path.

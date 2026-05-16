@@ -10,7 +10,7 @@ function baseProd(overrides: Partial<Config> = {}): Config {
     OAUTH_CLIENT_SECRET: "real-secret",
     DEFAULT_ADMIN: "ops@example.com",
     CORS_ORIGIN: "https://app.example.com",
-    ACCESS_URL: "https://app.example.com",
+    APP_URL: "https://app.example.com",
     ...overrides,
   } as unknown as Config;
 }
@@ -64,15 +64,15 @@ describe("assertProductionNetworkGuards", () => {
       .toThrow();
   });
 
-  test("requires ACCESS_URL when OAuth is in play", () => {
-    expect(() => assertProductionNetworkGuards(baseProd({ ACCESS_URL: undefined }), true))
-      .toThrow(/ACCESS_URL/);
+  test("requires APP_URL when OAuth is in play", () => {
+    expect(() => assertProductionNetworkGuards(baseProd({ APP_URL: undefined }), true))
+      .toThrow(/APP_URL/);
   });
 
-  test("warns instead of throwing when ACCESS_URL is missing in single-user mode", () => {
-    const warnings = assertProductionNetworkGuards(baseProd({ ACCESS_URL: undefined }), false);
+  test("warns instead of throwing when APP_URL is missing in single-user mode", () => {
+    const warnings = assertProductionNetworkGuards(baseProd({ APP_URL: undefined }), false);
     expect(warnings.length).toBe(1);
-    expect(warnings[0]).toMatch(/ACCESS_URL/);
+    expect(warnings[0]).toMatch(/APP_URL/);
   });
 
   test("returns no warnings on a healthy production config", () => {

@@ -99,8 +99,8 @@ describe("deriveOrigin", () => {
     return new Request(url, { headers });
   }
 
-  test("uses ACCESS_URL when set, stripping trailing slash", () => {
-    const config = makeConfig({ ACCESS_URL: "https://example.com/" });
+  test("uses APP_URL when set, stripping trailing slash", () => {
+    const config = makeConfig({ APP_URL: "https://example.com/" });
     expect(deriveOrigin(req("https://internal.local/access/api"), config)).toBe("https://example.com");
   });
 
@@ -113,15 +113,15 @@ describe("deriveOrigin", () => {
     expect(deriveOrigin(r, config)).toBe("https://edge.example.com");
   });
 
-  test("falls back to request URL when no headers and no ACCESS_URL (non-prod)", () => {
+  test("falls back to request URL when no headers and no APP_URL (non-prod)", () => {
     const config = makeConfig({ NODE_ENV: "development" });
     expect(deriveOrigin(req("https://localhost:3000/access/api"), config)).toBe("https://localhost:3000");
   });
 
-  test("throws in production when ACCESS_URL is unset", () => {
+  test("throws in production when APP_URL is unset", () => {
     const config = makeConfig({ NODE_ENV: "production" });
     expect(() => deriveOrigin(req("http://attacker.example/"), config)).toThrow(
-      /ACCESS_URL must be set in production/,
+      /APP_URL must be set in production/,
     );
   });
 });

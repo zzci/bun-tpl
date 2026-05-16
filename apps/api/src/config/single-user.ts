@@ -83,7 +83,7 @@ export function resolveSingleUserConfig(
 
 /**
  * True iff the deployment uses OAuth for at least some logins. Used
- * by `loadConfig` to gate the CORS_ORIGIN / ACCESS_URL boot guards —
+ * by `loadConfig` to gate the CORS_ORIGIN / APP_URL boot guards —
  * a pure single-user deployment has no OAuth callback to protect.
  */
 export function oauthInPlay(data: Config): boolean {

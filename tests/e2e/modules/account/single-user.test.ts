@@ -52,7 +52,7 @@ async function waitForReady(): Promise<void> {
 beforeAll(async () => {
   dataDir = mkdtempSync(join(tmpdir(), "single-user-e2e-"));
 
-  // Strip OAUTH_* / ACCESS_URL so the OAuth surface is genuinely absent
+  // Strip OAUTH_* / APP_URL so the OAuth surface is genuinely absent
   // — the orchestrator parent injects them and they would otherwise be
   // inherited via process.env.
   const SCRUB = new Set([
@@ -64,7 +64,7 @@ beforeAll(async () => {
     "OAUTH_USERINFO_URL",
     "OAUTH_PKCE",
     "OIDC_LOGOUT_URL",
-    "ACCESS_URL",
+    "APP_URL",
     "DEFAULT_ADMIN",
     "DB_ENCRYPTION",
     "PORT",
@@ -94,7 +94,7 @@ beforeAll(async () => {
       DB_ENCRYPTION: "false",
       LOG_LEVEL: "warn",
       LOG_TO_STDOUT: "true",
-      ACCESS_URL: `http://127.0.0.1:${API_PORT}`,
+      APP_URL: `http://127.0.0.1:${API_PORT}`,
       CORS_ORIGIN: `http://127.0.0.1:${API_PORT}`,
       SINGLE_USER_MODE: "true",
       SINGLE_USER_USERNAME: USERNAME,

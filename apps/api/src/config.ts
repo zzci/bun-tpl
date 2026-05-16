@@ -39,7 +39,7 @@ function resolvePath(p: string): string {
  * failure. Use this from tests so failures bubble up as exceptions.
  *
  * @param warn  Receives non-fatal warnings (stale OIDC cache,
- *              production-but-no-ACCESS_URL in single-user mode, …).
+ *              production-but-no-APP_URL in single-user mode, …).
  *              Defaults to `console.warn` so production output stays
  *              identical to the pre-split version.
  */
@@ -54,7 +54,7 @@ export async function loadConfigStrict(
   const data = result.data;
 
   // Boot guards in dependency order:
-  //   1. Network-boundary requirements (CORS_ORIGIN / ACCESS_URL).
+  //   1. Network-boundary requirements (CORS_ORIGIN / APP_URL).
   //   2. Single-user mode (resolves hash file → validates format).
   //   3. Production sentinels (refuse example values).
   for (const w of assertProductionNetworkGuards(data, oauthInPlay(data)))
