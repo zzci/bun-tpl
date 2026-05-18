@@ -47,14 +47,14 @@
   "devDependencies": {
     "@app/tsconfig": "workspace:*",
     "@tailwindcss/vite": "4.3.0",
-    "@tanstack/router-plugin": "1.167.35",
+    "@tanstack/router-plugin": "1.168.6",
     "@types/react": "19.2.14",
     "@types/react-dom": "19.2.3",
-    "@vitejs/plugin-react": "6.0.1",
+    "@vitejs/plugin-react": "6.0.2",
     "@vitest/coverage-v8": "4.1.6",
     "tailwindcss": "4.3.0",
     "typescript": "catalog:",
-    "vite": "8.0.12",
+    "vite": "8.0.13",
     "vitest": "catalog:"
   }
 }
