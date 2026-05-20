@@ -14,7 +14,7 @@ import { initCronActions, startCron } from "./modules/cron";
 import { bootstrapEncryption } from "./modules/encryption";
 import { EncryptionState as EncryptionStateCtor } from "./modules/encryption/state";
 import { initFileModule, startFileGcSweep } from "./modules/file";
-import { policyMiddleware } from "./modules/policy";
+import { getAllRouteBindings, policyMiddleware } from "./modules/policy";
 import { protectedRoutes, publicRoutes, setupRoutes } from "./routes";
 import { getAuthConfig, seedSettingsFromEnv } from "./shared/lib/app-config";
 import { createLogger } from "./shared/lib/logger";
@@ -160,6 +160,19 @@ export async function buildFullApp({ config, db, logger, encryption }: AppDeps) 
 
   api.route("/", publicRoutes());
   api.route("/", protectedRoutes());
+
+  // Fail closed at boot: protected modules register their object-level
+  // policy bindings as an import side-effect of the `protectedRoutes()`
+  // mount above. An empty registry means `policyMiddleware` would fall
+  // through every request unauthorized — a catastrophic silent bypass.
+  // Assert here (before serving) rather than letting it degrade at runtime.
+  if (getAllRouteBindings().length === 0) {
+    throw new Error(
+      "[policy] no route bindings registered after mounting protectedRoutes() — "
+      + "policy enforcement would fail open. This is a wiring bug (a module's "
+      + "defineResource() side-effect did not run).",
+    );
+  }
 
   api.onError(errorHandler);
 

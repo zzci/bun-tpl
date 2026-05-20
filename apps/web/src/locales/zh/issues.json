@@ -57,6 +57,7 @@
     "replyingTo": "回复给",
     "replyMissing": "原评论已删除",
     "noComments": "暂无评论。",
+    "showOlder": "显示 {{count}} 条更早的评论",
     "deleteTitle": "删除评论",
     "deleteConfirm": "确定要删除此评论吗？",
     "justNow": "刚刚",

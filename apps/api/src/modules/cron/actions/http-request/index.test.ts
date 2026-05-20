@@ -168,6 +168,11 @@ describe("runHttpRequest — SSRF gate", () => {
     "http://172.16.0.1/",
     "http://192.168.1.1/",
     "http://localhost/",
+    "http://[::1]/",
+    "http://[::]/",
+    "http://[::ffff:127.0.0.1]/",
+    "http://[fc00::1]/",
+    "http://[fe80::1]/",
   ])("rejects private destination %s", async (url) => {
     expect(restrictedRun({ url })).rejects.toThrow(/refused private destination/);
   });
@@ -190,9 +195,23 @@ describe("runHttpRequest — SSRF gate", () => {
     expect(isPrivateDestination("172.16.0.1")).toBe(true);
     expect(isPrivateDestination("172.31.255.255")).toBe(true);
     expect(isPrivateDestination("172.32.0.1")).toBe(false);
+    // 0.0.0.0/8 — 0.x.x.x routes to loopback on Linux
+    expect(isPrivateDestination("0.0.0.0")).toBe(true);
+    expect(isPrivateDestination("0.1.2.3")).toBe(true);
+    // 100.64.0.0/10 — RFC 6598 CGNAT (cloud internal / metadata adjacency)
+    expect(isPrivateDestination("100.64.0.1")).toBe(true);
+    expect(isPrivateDestination("100.127.255.255")).toBe(true);
+    expect(isPrivateDestination("100.63.255.255")).toBe(false);
+    expect(isPrivateDestination("100.128.0.1")).toBe(false);
+    expect(isPrivateDestination("[::1]")).toBe(true);
+    expect(isPrivateDestination("[::]")).toBe(true);
+    expect(isPrivateDestination("::ffff:127.0.0.1")).toBe(true);
+    expect(isPrivateDestination("[::ffff:7f00:1]")).toBe(true);
+    expect(isPrivateDestination("::ffff:0808:0808")).toBe(false);
     expect(isPrivateDestination("fc00::1")).toBe(true);
     expect(isPrivateDestination("fd00::1")).toBe(true);
     expect(isPrivateDestination("fe80::1")).toBe(true);
+    expect(isPrivateDestination("febf::1")).toBe(true);
     expect(isPrivateDestination("2001:db8::1")).toBe(false);
   });
 

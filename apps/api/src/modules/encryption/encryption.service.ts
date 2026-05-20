@@ -1,7 +1,7 @@
 import type { EncryptionState } from "./state";
 import type { AppDatabase } from "@/db";
 import { randomBytes } from "node:crypto";
-import { existsSync, renameSync, unlinkSync } from "node:fs";
+import { copyFileSync, existsSync, renameSync, statSync, unlinkSync } from "node:fs";
 import { bytesToHex, eciesEncrypt, hexToBytes } from "@app/shared";
 import { createClient } from "@libsql/client";
 import { readEncryptionMeta, writeEncryptionMeta } from "./meta";
@@ -103,27 +103,51 @@ export async function rotateDek(state: EncryptionState, dbPath: string, currentD
     throw new Error("Invalid encryption key: expected 64-char lowercase hex string");
   }
 
-  // (a) Copy live DB into the rekey tmp using the new key, BEFORE the live
-  // handle is closed. Checkpoint first so WAL frames are visible to the copy
-  // reader. We then close the live handle and pause briefly so libsql can
-  // release WAL/SHM locks before the rename below moves the main file.
+  const snapPath = `${dbPath}.rekey.src`;
+
+  // (a) Quiesce the live DB and copy from a private filesystem SNAPSHOT
+  // rather than opening a second libsql client on the live path.
+  //
+  // The previous approach (checkpoint → close → fixed 200ms sleep →
+  // copyDatabase reading the LIVE file while it is later renamed) raced
+  // libsql's asynchronous WAL/SHM lock release and produced SQLITE_IOERR
+  // under concurrent load — which left the live handle closed and bricked
+  // every subsequent request (why the e2e was skipped).
+  //
+  // `wal_checkpoint(TRUNCATE)` folds the WAL into the main db file and
+  // truncates the WAL to zero; after the handle is closed and the WAL has
+  // drained, a plain `copyFileSync` of the single main file is a
+  // consistent point-in-time image. `copyDatabase` then reads that
+  // private snapshot — never the live path — so it cannot contend with
+  // request handlers or the rename below. No second libsql client ever
+  // touches the live file.
   await currentDb.checkpoint();
   currentDb.close();
-  await new Promise(resolve => setTimeout(resolve, 200));
+  await waitForWalDrained(dbPath);
 
   try {
-    await copyDatabase(dbPath, currentDek, tmpPath, newDek);
+    if (existsSync(snapPath))
+      unlinkSync(snapPath);
+    cleanupWalShm(snapPath);
+    copyFileSync(dbPath, snapPath);
+    await copyDatabase(snapPath, currentDek, tmpPath, newDek);
   }
   catch (err) {
-    // Nothing on disk has moved yet; clean up the tmp and rethrow. The live
-    // db handle is already closed, so the caller must re-open with the OLD
-    // dek to keep serving requests.
+    // Nothing on disk has moved yet; clean up tmp + snapshot and rethrow.
+    // The live db handle is already closed, so the caller must re-open
+    // with the OLD dek to keep serving requests.
     if (existsSync(tmpPath))
       unlinkSync(tmpPath);
+    if (existsSync(snapPath))
+      unlinkSync(snapPath);
     cleanupWalShm(tmpPath);
+    cleanupWalShm(snapPath);
     await reopenWithDek(state, currentDek);
     throw err;
   }
+  if (existsSync(snapPath))
+    unlinkSync(snapPath);
+  cleanupWalShm(snapPath);
 
   // (b) Verify the tmp opens with the new key.
   try {
@@ -318,6 +342,12 @@ async function copyDatabase(srcPath: string, srcKey: string | undefined, dstPath
     }
 
     await dst.execute("PRAGMA foreign_keys = ON");
+    // Fold the destination WAL into its main file before the handle is
+    // closed. Without this the copied rows stay in `${dstPath}-wal`; the
+    // caller renames only the main file and deletes that sidecar, so the
+    // promoted db would be missing all data and open with SQLITE_IOERR
+    // (the actual root cause of the rotate-dek failure).
+    await dst.execute("PRAGMA wal_checkpoint(TRUNCATE)");
   }
   finally {
     src.close();
@@ -393,5 +423,24 @@ function cleanupWalShm(basePath: string): void {
     const p = `${basePath}${suffix}`;
     if (existsSync(p))
       unlinkSync(p);
+  }
+}
+
+/**
+ * Deterministic replacement for the old fixed `setTimeout(200)`: after
+ * `wal_checkpoint(TRUNCATE)` + `close()`, block until the `-wal` file is
+ * gone or zero-length, proving the WAL has been folded into the main db
+ * file and libsql has released it. Pure filesystem stat — opens no libsql
+ * client, so it cannot itself contend on the live path. Bounded so a
+ * pathological hang surfaces as a rotation error (then recovered) rather
+ * than wedging the request.
+ */
+async function waitForWalDrained(dbPath: string): Promise<void> {
+  const walPath = `${dbPath}-wal`;
+  const deadline = Date.now() + 3000;
+  while (existsSync(walPath) && statSync(walPath).size > 0) {
+    if (Date.now() >= deadline)
+      throw new Error("WAL did not drain after checkpoint; aborting DEK rotation before snapshot");
+    await new Promise(resolve => setTimeout(resolve, 25));
   }
 }

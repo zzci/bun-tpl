@@ -40,41 +40,108 @@ export async function createResourceGroup(
     throw new ValidationError("Name is required", { name: "Name cannot be empty" });
   }
 
-  // Check duplicate name
-  const existing = await db
-    .select()
-    .from(relationTuples)
-    .where(
-      and(
-        eq(relationTuples.namespace, "resource_group"),
-        eq(relationTuples.relation, "__meta__"),
-        eq(relationTuples.subjectNamespace, "resource_group"),
-        eq(relationTuples.subjectId, input.name.trim()),
-      ),
-    )
-    .get();
-
-  if (existing) {
-    throw new ValidationError("Duplicate resource group", { name: "A resource group with this name already exists" });
-  }
-
   const id = nanoid();
   const now = new Date().toISOString();
+  const name = input.name.trim();
+  const description = input.description?.trim() || null;
 
-  // Store metadata as a special tuple
-  await db.insert(relationTuples).values({
-    id,
-    namespace: "resource_group",
-    objectId: id,
-    relation: "__meta__",
-    subjectNamespace: "resource_group",
-    subjectId: input.name.trim(),
-    subjectRelation: input.description?.trim() || null,
-    createdBy,
-    createdAt: now,
-  }).run();
+  // Duplicate-name check + insert in one transaction so two concurrent
+  // creates of the same name cannot both pass the check (the unique index
+  // keys on objectId, so it offers no name-level backstop).
+  await db.transaction(async (tx) => {
+    const existing = await tx
+      .select()
+      .from(relationTuples)
+      .where(
+        and(
+          eq(relationTuples.namespace, "resource_group"),
+          eq(relationTuples.relation, "__meta__"),
+          eq(relationTuples.subjectNamespace, "resource_group"),
+          eq(relationTuples.subjectId, name),
+        ),
+      )
+      .get();
 
-  return { id, name: input.name.trim(), description: input.description?.trim() ?? null, createdAt: now };
+    if (existing) {
+      throw new ValidationError("Duplicate resource group", { name: "A resource group with this name already exists" });
+    }
+
+    await tx.insert(relationTuples).values({
+      id,
+      namespace: "resource_group",
+      objectId: id,
+      relation: "__meta__",
+      subjectNamespace: "resource_group",
+      subjectId: name,
+      subjectRelation: description,
+      createdBy,
+      createdAt: now,
+    }).run();
+  });
+
+  return { id, name, description, createdAt: now };
+}
+
+export async function updateResourceGroup(
+  db: AppDatabase,
+  id: string,
+  input: { readonly name: string; readonly description?: string | null },
+): Promise<ResourceGroup> {
+  if (!input.name.trim()) {
+    throw new ValidationError("Name is required", { name: "Name cannot be empty" });
+  }
+
+  const name = input.name.trim();
+  const description = input.description?.trim() || null;
+  let createdAt = "";
+
+  // Existence + rename-collision check + update in one transaction so a
+  // concurrent rename to the same name cannot interleave between the
+  // clash check and the write.
+  await db.transaction(async (tx) => {
+    const meta = await tx
+      .select()
+      .from(relationTuples)
+      .where(
+        and(
+          eq(relationTuples.namespace, "resource_group"),
+          eq(relationTuples.objectId, id),
+          eq(relationTuples.relation, "__meta__"),
+        ),
+      )
+      .get();
+
+    if (!meta) {
+      throw new NotFoundError("ResourceGroup", id);
+    }
+    createdAt = meta.createdAt;
+
+    if (name !== meta.subjectId) {
+      const clash = await tx
+        .select()
+        .from(relationTuples)
+        .where(
+          and(
+            eq(relationTuples.namespace, "resource_group"),
+            eq(relationTuples.relation, "__meta__"),
+            eq(relationTuples.subjectNamespace, "resource_group"),
+            eq(relationTuples.subjectId, name),
+          ),
+        )
+        .get();
+      if (clash) {
+        throw new ValidationError("Duplicate resource group", { name: "A resource group with this name already exists" });
+      }
+    }
+
+    await tx
+      .update(relationTuples)
+      .set({ subjectId: name, subjectRelation: description })
+      .where(eq(relationTuples.id, meta.id))
+      .run();
+  });
+
+  return { id, name, description, createdAt };
 }
 
 export async function deleteResourceGroup(db: AppDatabase, id: string): Promise<boolean> {

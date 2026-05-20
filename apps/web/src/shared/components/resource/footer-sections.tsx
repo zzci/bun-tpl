@@ -16,11 +16,20 @@ import { cn } from "@/shared/lib/utils";
 import { attachmentsQueryKey, ResourceAttachmentSection } from "./attachment-section";
 import { ResourceCommentSection } from "./comment-section";
 
-function SectionHeader({ children }: { readonly children: React.ReactNode }) {
+function SectionHeader({
+  children,
+  action,
+}: {
+  readonly children: React.ReactNode;
+  readonly action?: React.ReactNode;
+}) {
   return (
-    <h3 className="mb-2 text-xs font-medium uppercase tracking-wider text-muted-foreground">
-      {children}
-    </h3>
+    <div className="mb-2 flex items-center gap-2">
+      <h3 className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
+        {children}
+      </h3>
+      {action}
+    </div>
   );
 }
 
@@ -33,6 +42,7 @@ export function ResourceFooterSections({
   canDeleteComment,
   commentsLocked = false,
   commentsEnableReply = false,
+  commentsHeaderAction,
   sectionSpacingClassName = "mt-6",
 }: {
   readonly resource: string;
@@ -43,6 +53,8 @@ export function ResourceFooterSections({
   readonly canDeleteComment: (c: ResourceComment) => boolean;
   readonly commentsLocked?: boolean;
   readonly commentsEnableReply?: boolean;
+  /** Rendered next to the comments section label (e.g. a lock toggle). */
+  readonly commentsHeaderAction?: React.ReactNode;
   /** Tailwind class applied to each <section> (e.g. "mt-6" or "mt-4"). */
   readonly sectionSpacingClassName?: string;
 }) {
@@ -71,7 +83,7 @@ export function ResourceFooterSections({
       )}
 
       <section className={cn(sectionSpacingClassName)}>
-        <SectionHeader>{t("comments.title")}</SectionHeader>
+        <SectionHeader action={commentsHeaderAction}>{t("comments.title")}</SectionHeader>
         <ResourceCommentSection
           resource={resource}
           resourceId={resourceId}

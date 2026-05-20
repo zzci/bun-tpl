@@ -9,7 +9,7 @@
 //     comments. Used by docs comment moderation.
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { CornerUpLeft, Lock, Send, X } from "lucide-react";
+import { ChevronUp, CornerUpLeft, Lock, Send, X } from "lucide-react";
 import { useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 
@@ -39,6 +39,12 @@ export interface ResourceUser {
 export function commentsQueryKey(resource: string, resourceId: string) {
   return [resource, resourceId, "comments"] as const;
 }
+
+// A long thread mounts one full markdown renderer per comment. Cap the
+// initial render to the newest slice and reveal the rest progressively so
+// a 100+ comment thread doesn't mount everything at once. (`@tanstack/
+// react-virtual` isn't a dependency, so true windowing is out of scope.)
+const COMMENTS_INITIAL_RENDER = 20;
 
 function useFormatTimeAgo(i18nNs: string) {
   const { t } = useTranslation(i18nNs);
@@ -90,15 +96,21 @@ export function ResourceCommentSection({
   const composerRef = useRef<HTMLDivElement>(null);
   const commentNodesRef = useRef(new Map<string, HTMLDivElement>());
   const [flashId, setFlashId] = useState<string | null>(null);
+  const [visibleCount, setVisibleCount] = useState(COMMENTS_INITIAL_RENDER);
 
   const commentsQuery = useQuery({
     queryKey: commentsQueryKey(resource, resourceId),
     queryFn: () => http<{ data: ResourceComment[] }>(`/${resource}/${resourceId}/comments`).then(r => r.data),
   });
+  const allComments = useMemo(() => commentsQuery.data ?? [], [commentsQuery.data]);
   const commentById = useMemo(
-    () => new Map((commentsQuery.data ?? []).map(c => [c.id, c])),
-    [commentsQuery.data],
+    () => new Map(allComments.map(c => [c.id, c])),
+    [allComments],
   );
+  // Render only the newest `visibleCount` (tail of the chronological list);
+  // the rest stay collapsed behind a "show older" button.
+  const hiddenCount = Math.max(0, allComments.length - visibleCount);
+  const visibleComments = hiddenCount > 0 ? allComments.slice(hiddenCount) : allComments;
 
   const submit = useMutation({
     mutationFn: async (input: { content: string; replyToId: string | null }) => {
@@ -133,12 +145,24 @@ export function ResourceCommentSection({
   };
 
   const jumpToComment = (id: string) => {
-    const el = commentNodesRef.current.get(id);
-    if (!el)
+    // The target may be in the collapsed-older range — reveal everything so
+    // its ref mounts, then scroll on the next frame once it's painted.
+    if (!commentById.has(id))
       return;
-    el.scrollIntoView({ behavior: "smooth", block: "center" });
-    setFlashId(id);
-    window.setTimeout(() => setFlashId(prev => (prev === id ? null : prev)), 1500);
+    const scrollToEl = () => {
+      const el = commentNodesRef.current.get(id);
+      if (!el)
+        return;
+      el.scrollIntoView({ behavior: "smooth", block: "center" });
+      setFlashId(id);
+      window.setTimeout(() => setFlashId(prev => (prev === id ? null : prev)), 1500);
+    };
+    if (commentNodesRef.current.has(id)) {
+      scrollToEl();
+      return;
+    }
+    setVisibleCount(allComments.length);
+    requestAnimationFrame(() => requestAnimationFrame(scrollToEl));
   };
 
   const canCompose = !locked;
@@ -198,85 +222,101 @@ export function ResourceCommentSection({
       <div className="space-y-3">
         {commentsQuery.isLoading
           ? <div className="text-sm text-muted-foreground text-center py-4">{t("common.loading")}</div>
-          : (commentsQuery.data ?? []).length === 0
-              ? <div className="text-sm text-muted-foreground text-center py-4">{t("comments.noComments")}</div>
-              : (commentsQuery.data ?? []).map((comment) => {
-                  const parent = enableReply && comment.replyToId ? commentById.get(comment.replyToId) : null;
-                  return (
-                    <div
-                      key={comment.id}
-                      ref={(el) => {
-                        if (el)
-                          commentNodesRef.current.set(comment.id, el);
-                        else
-                          commentNodesRef.current.delete(comment.id);
-                      }}
-                      className={cn(
-                        "group transition-colors",
-                        flashId === comment.id && "bg-primary/5 -mx-2 px-2 py-2 rounded-md",
-                      )}
-                    >
-                      <div className="mb-1 flex items-center justify-between">
-                        <div className="flex items-baseline gap-2">
-                          <span className="text-sm font-medium">
-                            {displayName(userMap, comment.authorId)}
-                          </span>
-                          <span className="text-[11px] text-muted-foreground">
-                            {formatTimeAgo(comment.createdAt)}
-                          </span>
-                        </div>
-                        <div className="inline-flex items-center gap-1">
-                          {enableReply && canCompose && (
-                            <button
-                              type="button"
-                              className="inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-[11px] text-muted-foreground/70 hover:bg-accent hover:text-foreground transition-colors"
-                              onClick={() => startReply(comment)}
-                            >
-                              <CornerUpLeft className="size-3" />
-                              {t("comments.reply")}
-                            </button>
-                          )}
-                          {canDelete(comment) && (
-                            <button
-                              type="button"
-                              className="inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-[11px] text-muted-foreground/70 hover:bg-destructive/10 hover:text-destructive transition-colors"
-                              onClick={() => setDeleteTarget(comment)}
-                            >
-                              <X className="size-3" />
-                              {t("common.delete")}
-                            </button>
-                          )}
-                        </div>
-                      </div>
-                      {enableReply && comment.replyToId && (
-                        <button
-                          type="button"
-                          className="mb-1 inline-flex max-w-full items-center gap-1 rounded bg-muted/30 px-2 py-0.5 text-[11px] text-muted-foreground hover:bg-muted/60 hover:text-foreground transition-colors"
-                          onClick={() => jumpToComment(comment.replyToId!)}
-                          title={parent ? parent.content : undefined}
-                        >
-                          <CornerUpLeft className="size-3 shrink-0" />
-                          {parent
-                            ? (
-                                <span className="truncate">
-                                  {displayName(userMap, parent.authorId)}
-                                  <span className="mx-1 text-muted-foreground/50">·</span>
-                                  {parent.content.replace(/\s+/g, " ").slice(0, 60)}
-                                </span>
-                              )
-                            : <span>{t("comments.replyMissing")}</span>}
-                        </button>
-                      )}
-                      <div className="rounded-md bg-muted/40 px-3 py-2">
-                        <MarkdownEditor
-                          defaultValue={comment.content}
-                          readOnly
-                          className="text-sm"
-                        />
-                      </div>
+          : allComments.length === 0
+            ? <div className="text-sm text-muted-foreground text-center py-4">{t("comments.noComments")}</div>
+            : (
+                <>
+                  {hiddenCount > 0 && (
+                    <div className="flex justify-center">
+                      <button
+                        type="button"
+                        className="inline-flex items-center gap-1 rounded px-2 py-1 text-[11px] text-muted-foreground hover:bg-accent hover:text-foreground transition-colors"
+                        onClick={() => setVisibleCount(c => c + COMMENTS_INITIAL_RENDER)}
+                      >
+                        <ChevronUp className="size-3" />
+                        {t("comments.showOlder", { count: hiddenCount })}
+                      </button>
                     </div>
-                  );
-                })}
+                  )}
+                  {visibleComments.map((comment) => {
+                    const parent = enableReply && comment.replyToId ? commentById.get(comment.replyToId) : null;
+                    return (
+                      <div
+                        key={comment.id}
+                        ref={(el) => {
+                          if (el)
+                            commentNodesRef.current.set(comment.id, el);
+                          else
+                            commentNodesRef.current.delete(comment.id);
+                        }}
+                        className={cn(
+                          "group transition-colors",
+                          flashId === comment.id && "bg-primary/5 -mx-2 px-2 py-2 rounded-md",
+                        )}
+                      >
+                        <div className="mb-1 flex items-center justify-between">
+                          <div className="flex items-baseline gap-2">
+                            <span className="text-sm font-medium">
+                              {displayName(userMap, comment.authorId)}
+                            </span>
+                            <span className="text-[11px] text-muted-foreground">
+                              {formatTimeAgo(comment.createdAt)}
+                            </span>
+                          </div>
+                          <div className="inline-flex items-center gap-1">
+                            {enableReply && canCompose && (
+                              <button
+                                type="button"
+                                className="inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-[11px] text-muted-foreground/70 hover:bg-accent hover:text-foreground transition-colors"
+                                onClick={() => startReply(comment)}
+                              >
+                                <CornerUpLeft className="size-3" />
+                                {t("comments.reply")}
+                              </button>
+                            )}
+                            {canDelete(comment) && (
+                              <button
+                                type="button"
+                                className="inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-[11px] text-muted-foreground/70 hover:bg-destructive/10 hover:text-destructive transition-colors"
+                                onClick={() => setDeleteTarget(comment)}
+                              >
+                                <X className="size-3" />
+                                {t("common.delete")}
+                              </button>
+                            )}
+                          </div>
+                        </div>
+                        {enableReply && comment.replyToId && (
+                          <button
+                            type="button"
+                            className="mb-1 inline-flex max-w-full items-center gap-1 rounded bg-muted/30 px-2 py-0.5 text-[11px] text-muted-foreground hover:bg-muted/60 hover:text-foreground transition-colors"
+                            onClick={() => jumpToComment(comment.replyToId!)}
+                            title={parent ? parent.content : undefined}
+                          >
+                            <CornerUpLeft className="size-3 shrink-0" />
+                            {parent
+                              ? (
+                                  <span className="truncate">
+                                    {displayName(userMap, parent.authorId)}
+                                    <span className="mx-1 text-muted-foreground/50">·</span>
+                                    {parent.content.replace(/\s+/g, " ").slice(0, 60)}
+                                  </span>
+                                )
+                              : <span>{t("comments.replyMissing")}</span>}
+                          </button>
+                        )}
+                        <div className="rounded-md bg-muted/40 px-3 py-2">
+                          <MarkdownEditor
+                            defaultValue={comment.content}
+                            readOnly
+                            className="text-sm"
+                          />
+                        </div>
+                      </div>
+                    );
+                  })}
+                </>
+              )}
       </div>
 
       <ConfirmDeleteDialog

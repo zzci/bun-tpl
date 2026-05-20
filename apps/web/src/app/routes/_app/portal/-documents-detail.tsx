@@ -9,12 +9,10 @@
 import type { DraftState } from "./-documents-shared";
 import {
   FileText,
-  Lock,
   Paperclip,
   Pencil,
   Share2,
   Trash2,
-  Unlock,
 } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
@@ -30,6 +28,7 @@ import { CenteredHint } from "@/shared/components/ui/centered-hint";
 import { ConfirmDeleteDialog } from "@/shared/components/ui/confirm-delete-dialog";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/shared/components/ui/tooltip";
 import {
+  DocumentVersionConflictError,
   parseTags,
   useDeleteDocument,
   useDocument,
@@ -164,7 +163,7 @@ export function DocumentDetail({
 
   const handleSave = () => {
     if (!draft.title.trim()) {
-      toast.error(t("field.titleRequired", { defaultValue: "标题不能为空" }));
+      toast.error(t("field.titleRequired"));
       return;
     }
     updateMutation.mutate(
@@ -178,6 +177,14 @@ export function DocumentDetail({
       {
         onSuccess: () => setEditing(false),
         onError: (err) => {
+          // Version conflict is special: the document changed in another
+          // session. Keep edit mode open and the draft untouched so the
+          // user can copy their work — never clobber it with a generic
+          // failure path or a cache reseed.
+          if (err instanceof DocumentVersionConflictError) {
+            toast.error(t("conflict.body"), { duration: 10000 });
+            return;
+          }
           toast.error(errorMessage(err, t("common.error.operationFailed")));
         },
       },
@@ -185,7 +192,7 @@ export function DocumentDetail({
   };
 
   const handleShare = () => {
-    toast(`${t("share", { defaultValue: "分享" })} — placeholder`);
+    toast(t("shareComingSoon"));
   };
 
   const handleDelete = () => {
@@ -226,7 +233,7 @@ export function DocumentDetail({
                   <input
                     value={draft.title}
                     onChange={e => setDraft(prev => prev ? { ...prev, title: e.target.value } : prev)}
-                    placeholder={t("untitledPlaceholder", { defaultValue: "Untitled" })}
+                    placeholder={t("untitledPlaceholder")}
                     className="min-w-0 flex-1 border-0 bg-transparent px-0 text-lg font-semibold tracking-tight outline-none placeholder:text-muted-foreground/40"
                     aria-label="Document title"
                   />
@@ -242,7 +249,7 @@ export function DocumentDetail({
                 >
                   <FileText className="size-5 shrink-0 text-muted-foreground" strokeWidth={1.75} />
                   <span className="min-w-0 truncate">
-                    {doc.title || t("untitledPlaceholder", { defaultValue: "Untitled" })}
+                    {doc.title || t("untitledPlaceholder")}
                   </span>
                 </h2>
               )}
@@ -255,7 +262,7 @@ export function DocumentDetail({
                     {t("common.cancel")}
                   </Button>
                   <Button size="sm" onClick={handleSave} disabled={updateMutation.isPending}>
-                    {t("common.save", { defaultValue: "保存" })}
+                    {t("common.save")}
                   </Button>
                 </>
               )
@@ -281,7 +288,7 @@ export function DocumentDetail({
                     >
                       <Paperclip className="size-4" />
                     </TooltipTrigger>
-                    <TooltipContent>{t("attachments.upload", { defaultValue: "添加附件" })}</TooltipContent>
+                    <TooltipContent>{t("attachments.upload")}</TooltipContent>
                   </Tooltip>
                   <Tooltip>
                     <TooltipTrigger
@@ -293,35 +300,6 @@ export function DocumentDetail({
                     </TooltipTrigger>
                     <TooltipContent>{t("share")}</TooltipContent>
                   </Tooltip>
-                  {(isAdmin || isCreator) && (
-                    <Tooltip>
-                      <TooltipTrigger
-                        render={(
-                          <Button
-                            variant="ghost"
-                            size="icon-sm"
-                            onClick={() => {
-                              updateMutation.mutate(
-                                { id: doc.id, version: doc.version, commentsLocked: !doc.commentsLocked },
-                                {
-                                  onError: (err) => {
-                                    toast.error(errorMessage(err, t("common.error.operationFailed")));
-                                  },
-                                },
-                              );
-                            }}
-                          />
-                        )}
-                      >
-                        {doc.commentsLocked ? <Unlock className="size-4" /> : <Lock className="size-4" />}
-                      </TooltipTrigger>
-                      <TooltipContent>
-                        {doc.commentsLocked
-                          ? t("comments.unlock", { defaultValue: "解锁评论" })
-                          : t("comments.lock", { defaultValue: "锁定评论" })}
-                      </TooltipContent>
-                    </Tooltip>
-                  )}
                   <Tooltip>
                     <TooltipTrigger
                       render={(
@@ -330,7 +308,7 @@ export function DocumentDetail({
                     >
                       <Pencil className="size-4" />
                     </TooltipTrigger>
-                    <TooltipContent>{t("common.edit", { defaultValue: "编辑" })}</TooltipContent>
+                    <TooltipContent>{t("common.edit")}</TooltipContent>
                   </Tooltip>
                   <Tooltip>
                     <TooltipTrigger
@@ -377,7 +355,7 @@ export function DocumentDetail({
                 >
                   <FileText className="size-5 shrink-0 text-muted-foreground" strokeWidth={1.75} />
                   <span className="min-w-0 truncate">
-                    {doc.title || t("untitledPlaceholder", { defaultValue: "Untitled" })}
+                    {doc.title || t("untitledPlaceholder")}
                   </span>
                 </h1>
                 {/* Byline — centered under the title, answers "who & when"
@@ -389,7 +367,7 @@ export function DocumentDetail({
                 </p>
                 {doc.content
                   ? <MarkdownEditor value={doc.content} readOnly />
-                  : <p className="text-sm italic text-muted-foreground/70">{t("field.noContent", { defaultValue: "暂无内容。" })}</p>}
+                  : <p className="text-sm italic text-muted-foreground/70">{t("field.noContent")}</p>}
 
                 {/* Tags — sits after the body, before attachments. */}
                 <div className="mt-4">
@@ -406,6 +384,26 @@ export function DocumentDetail({
                   userMap={userMap}
                   commentsLocked={doc.commentsLocked}
                   commentsEnableReply
+                  commentsHeaderAction={(isAdmin || isCreator) && (
+                    <button
+                      type="button"
+                      className="rounded px-1.5 py-0.5 text-[11px] text-primary/80 hover:bg-primary/10 hover:text-primary transition-colors"
+                      onClick={() => {
+                        updateMutation.mutate(
+                          { id: doc.id, version: doc.version, commentsLocked: !doc.commentsLocked },
+                          {
+                            onError: (err) => {
+                              toast.error(errorMessage(err, t("common.error.operationFailed")));
+                            },
+                          },
+                        );
+                      }}
+                    >
+                      {doc.commentsLocked
+                        ? t("comments.unlock", { defaultValue: "Unlock comments" })
+                        : t("comments.lock", { defaultValue: "Lock comments" })}
+                    </button>
+                  )}
                   canDeleteAttachment={att => isAdmin || isCreator || att.uploadedBy === user?.id}
                   canDeleteComment={c => isAdmin || c.authorId === user?.id}
                 />

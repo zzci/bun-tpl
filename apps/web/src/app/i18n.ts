@@ -1,4 +1,5 @@
 import type { BackendModule } from "i18next";
+import type { CustomDetector } from "i18next-browser-languagedetector";
 import i18n from "i18next";
 import LanguageDetector from "i18next-browser-languagedetector";
 import { initReactI18next } from "react-i18next";
@@ -62,6 +63,39 @@ const lazyBackend: BackendModule = {
   },
 };
 
+// The built-in `localStorage` cache detector feature-probes storage once
+// and caches the result, but its actual `setItem(lng)` write is NOT
+// wrapped — a later quota-exceeded error or Safari private-mode toggle
+// throws uncaught during `languageChanged`. Override the same-named
+// detector with a try/catch'd write (no-op on failure); reads stay
+// best-effort too. Registered by name so it shadows the built-in.
+const guardedLocalStorageDetector: CustomDetector = {
+  name: "localStorage",
+  lookup({ lookupLocalStorage }) {
+    if (!lookupLocalStorage || typeof window === "undefined")
+      return undefined;
+    try {
+      return window.localStorage.getItem(lookupLocalStorage) || undefined;
+    }
+    catch {
+      return undefined;
+    }
+  },
+  cacheUserLanguage(lng, { lookupLocalStorage }) {
+    if (!lookupLocalStorage || typeof window === "undefined")
+      return;
+    try {
+      window.localStorage.setItem(lookupLocalStorage, lng);
+    }
+    catch {
+      // no-op: language still applied for this session.
+    }
+  },
+};
+
+const languageDetector = new LanguageDetector();
+languageDetector.addDetector(guardedLocalStorageDetector);
+
 // Map i18next language codes to BCP-47 codes for the document `lang`
 // attribute. Only locales that need a country-specific mapping live here
 // (e.g. `zh` -> `zh-CN`); every other locale code is returned as-is, so
@@ -86,7 +120,7 @@ function syncDocumentLang(lng: string): void {
  */
 export const i18nReady: Promise<unknown> = i18n
   .use(lazyBackend)
-  .use(LanguageDetector)
+  .use(languageDetector)
   .use(initReactI18next)
   .init({
     fallbackLng: "en",

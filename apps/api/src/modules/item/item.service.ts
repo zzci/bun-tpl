@@ -1,5 +1,5 @@
 import type { AppDatabase } from "@/db";
-import { and, count, desc, eq, inArray, isNull, like, or, sql } from "drizzle-orm";
+import { and, count, desc, eq, inArray, isNotNull, isNull, like, or, sql } from "drizzle-orm";
 import { items } from "@/modules/item/schema";
 import { relationTuples } from "@/modules/policy/schema";
 import { NotFoundError, ValidationError } from "@/shared/lib/errors";
@@ -192,19 +192,29 @@ export async function softDeleteItem(db: AppDatabase, id: string): Promise<void>
 }
 
 /**
- * Reverse {@link softDeleteItem}. Tuples are NOT auto-restored — the
- * sub-type is expected to re-issue them as appropriate (creator stays
- * an editable participant via the human-recovery flow, not via stale
- * tuples). Callers that want the owner tuple back must rewrite it
- * themselves.
+ * Reverse {@link softDeleteItem}.
+ *
+ * IMPORTANT: owner / participant / policy tuples are NOT auto-restored here.
+ * {@link softDeleteItem} deletes every `(item, id, …)` tuple, and this
+ * function has no owner/creator context to safely re-issue them. The
+ * sub-type / route layer that triggers a restore MUST re-write the
+ * appropriate relation tuples (at minimum the `owner` tuple) itself —
+ * otherwise the restored item is live but unreachable via policy checks.
+ *
+ * The update is scoped to soft-deleted rows only: restoring an already-live
+ * row is a no-op (no spurious version bump) and returns the existing row.
  */
 export async function restoreItem(db: AppDatabase, id: string): Promise<ItemRow | undefined> {
   const now = new Date().toISOString();
+  // Scope the write to soft-deleted rows. When the row is already live (or
+  // absent) no row matches, so the version is not bumped; we just return the
+  // current row (if any) unchanged.
   await db
     .update(items)
     .set({ deletedAt: null, updatedAt: now, version: sql`${items.version} + 1` })
-    .where(eq(items.id, id))
+    .where(and(eq(items.id, id), isNotNull(items.deletedAt)))
     .run();
+
   return await db.select().from(items).where(eq(items.id, id)).get();
 }
 

@@ -17,8 +17,10 @@ export class AppError extends Error {
 }
 
 export class NotFoundError extends AppError {
-  constructor(resource: string, _id?: string) {
-    super(`${resource} not found`, 404, "NOT_FOUND");
+  // `id` is included in the message for debuggability. All ids passed here are
+  // opaque nanoids / ULIDs (no PII), so surfacing them is safe.
+  constructor(resource: string, id?: string) {
+    super(id ? `${resource} ${id} not found` : `${resource} not found`, 404, "NOT_FOUND");
   }
 }
 

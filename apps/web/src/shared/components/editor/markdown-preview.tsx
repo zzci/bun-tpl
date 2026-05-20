@@ -39,7 +39,28 @@ interface MarkdownPreviewProps {
 // react-markdown emits `<input type="checkbox" disabled>` for GFM task
 // list items. The Milkdown editor's node view assigns a `md-task-checkbox`
 // class so the checkbox carries the same skin in both surfaces.
+// A link in user markdown is untrusted, attacker-influenced content.
+// `rel="ugc"` flags it as user-generated; `noopener noreferrer` severs
+// the `window.opener` / Referer leak. External (absolute) links open in
+// a new tab; relative/in-app links keep default same-tab navigation.
+function isExternalHref(href: string | undefined): boolean {
+  if (!href)
+    return false;
+  return /^[a-z][\w+.-]*:/i.test(href) || href.startsWith("//");
+}
+
 const markdownComponents: Components = {
+  a({ href, ...props }) {
+    const external = isExternalHref(href);
+    return (
+      <a
+        {...props}
+        href={href}
+        rel="noopener noreferrer ugc"
+        {...(external ? { target: "_blank" } : {})}
+      />
+    );
+  },
   input(props) {
     if (props.type === "checkbox") {
       return (

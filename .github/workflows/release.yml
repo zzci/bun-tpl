@@ -4,10 +4,9 @@ on:
   push:
     tags: ["v*"]
 
+# Minimal default — the publishing job widens this to exactly what it needs.
 permissions:
   contents: read
-  packages: write
-  id-token: write       # cosign keyless signing
 
 env:
   COSIGN_VERSION: v2.4.3
@@ -18,6 +17,14 @@ jobs:
     name: build + push image to ghcr.io
     runs-on: ubuntu-latest
     timeout-minutes: 30
+    # Manual-approval gate: pushing a `v*` tag does not auto-publish — a
+    # reviewer must approve the deployment to this Environment first. The
+    # Environment (and its required reviewers) is configured in repo settings.
+    environment: release
+    permissions:
+      contents: read
+      packages: write   # push image to ghcr.io
+      id-token: write    # cosign keyless (OIDC) signing
     steps:
       - uses: actions/checkout@v6
 
@@ -50,6 +57,7 @@ jobs:
           context: .
           platforms: linux/amd64
           push: true
+          build-args: BUILD_COMMIT=${{ github.sha }}
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
           provenance: mode=max
@@ -62,16 +70,28 @@ jobs:
         with:
           cosign-release: ${{ env.COSIGN_VERSION }}
 
-      - name: Sign image (keyless)
+      # Sign the image once by its immutable digest. All tags
+      # (latest, vX.Y.Z, vX.Y, …) resolve to this same digest, so a single
+      # signature covers every tag and avoids re-signing mutable tag strings.
+      - name: Sign image (keyless, by digest)
         env:
           DIGEST: ${{ steps.build.outputs.digest }}
-          TAGS: ${{ steps.meta.outputs.tags }}
         run: |
           set -euo pipefail
-          while IFS= read -r tag; do
-            [ -z "$tag" ] && continue
-            cosign sign --yes "${tag}@${DIGEST}"
-          done <<< "$TAGS"
+          cosign sign --yes "ghcr.io/${{ github.repository }}@${DIGEST}"
+
+      # Verify the signature we just created against the same digest so a
+      # signing misconfiguration (wrong OIDC identity, failed upload, …)
+      # fails the release instead of shipping an unverifiable image.
+      - name: Verify signature (keyless, by digest)
+        env:
+          DIGEST: ${{ steps.build.outputs.digest }}
+        run: |
+          set -euo pipefail
+          cosign verify \
+            --certificate-identity-regexp "^https://github.com/${{ github.repository }}/.github/workflows/release.yml@" \
+            --certificate-oidc-issuer "https://token.actions.githubusercontent.com" \
+            "ghcr.io/${{ github.repository }}@${DIGEST}"
 
       - name: Install syft
         uses: anchore/sbom-action/download-syft@v0

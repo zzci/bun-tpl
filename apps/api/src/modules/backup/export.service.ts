@@ -1,3 +1,19 @@
+/**
+ * Backup EXPORT — table rows only.
+ *
+ * SCOPE CAVEAT: file blob bytes are **out of backup scope**. This export
+ * streams `files` / `file_references` table *rows*, never the underlying
+ * object bytes (which live on the active storage driver — local disk, S3,
+ * …). Bundling blobs would balloon the JSON past every cap in
+ * `restore.service.ts` and is intentionally not attempted.
+ *
+ * Consequence: a backup restored onto a deployment whose storage backend
+ * does not already hold the referenced blobs will have `files` rows that
+ * point at absent objects. `restore.service.ts` runs a post-restore
+ * reconciliation that detects and quarantines those rows so a restored
+ * deployment fails loudly/visibly instead of 500ing on download. See
+ * `reconcileRestoredFiles` there.
+ */
 import type { AnyColumn } from "drizzle-orm";
 import type { AppDatabase } from "@/db";
 import { createClient } from "@libsql/client";

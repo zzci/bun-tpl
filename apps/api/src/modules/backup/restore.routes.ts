@@ -185,7 +185,7 @@ export function backupImportRoutes() {
       importedUserRows = incoming;
     }
 
-    const result = await importJsonBackup(db, effectiveData);
+    const result = await importJsonBackup(db, effectiveData, c.get("logger"));
 
     if (includeUsers) {
       // Force-revoke sessions for any user whose role or status changed.

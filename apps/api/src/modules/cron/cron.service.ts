@@ -4,8 +4,8 @@ import type { Config } from "@/config";
 import type { AppDatabase } from "@/db";
 import type { Logger } from "@/shared/lib/logger";
 import Baker from "cronbake";
-import { and, eq } from "drizzle-orm";
-import { cronJobs } from "@/modules/cron/schema";
+import { and, eq, isNull } from "drizzle-orm";
+import { cronJobLogs, cronJobs } from "@/modules/cron/schema";
 import { nanoid } from "@/shared/lib/id";
 import { __resetAndReinitActionsForTests, getAction, getActionExecutor, getDefaultActions } from "./actions";
 import { normalizeCron } from "./cron-format";
@@ -54,6 +54,37 @@ async function ensureDefaultJobs(db: AppDatabase, logger: Logger): Promise<void>
       }).run();
       logger.info({ name }, "cron_default_job_created");
     }
+  }
+}
+
+/**
+ * A `cron_job_logs` row stuck at `status='running'` with `finished_at IS NULL`
+ * means the process died mid-execution (the `finally`/catch that finalizes the
+ * row never ran). Left in place these ghost rows (a) pollute the admin UI's
+ * lastStatus='running' filter forever and (b) corrupt `maybeAutoPause`'s
+ * consecutive-failure streak. Reap them to `failed` once at boot, before any
+ * job is scheduled, so a fresh run starts from a clean history.
+ */
+async function reapStaleRunningLogs(db: AppDatabase, logger: Logger): Promise<void> {
+  try {
+    const finishedAt = new Date().toISOString();
+    const reaped = await db
+      .update(cronJobLogs)
+      .set({
+        status: "failed",
+        error: "Process exited while job was running (crash-detected on startup)",
+        finishedAt,
+      })
+      .where(and(eq(cronJobLogs.status, "running"), isNull(cronJobLogs.finishedAt)))
+      .returning({ id: cronJobLogs.id })
+      .all();
+
+    if (reaped.length > 0) {
+      logger.warn({ count: reaped.length }, "cron_stale_running_logs_reaped");
+    }
+  }
+  catch (err) {
+    logger.error({ err }, "cron_stale_running_logs_reap_failed");
   }
 }
 
@@ -169,6 +200,10 @@ export async function startCron(deps: SchedulerDeps): Promise<void> {
   });
 
   const executorDeps = buildExecutorDeps(deps, baker);
+
+  // Reap crash-orphaned 'running' rows before anything is scheduled so the
+  // first execution + the admin UI both see a consistent run history.
+  await reapStaleRunningLogs(deps.db, deps.logger);
 
   try {
     await ensureDefaultJobs(deps.db, deps.logger);

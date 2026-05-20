@@ -248,9 +248,11 @@ export interface UpdateDocumentInput {
 }
 
 /**
- * Optimistic update with rollback on failure. On 409 the cache is replaced
- * with the server's freshly-read row (carried by DocumentVersionConflictError),
- * so the caller's next save will already have the correct `version`.
+ * Optimistic update with rollback on failure. On 409 we restore the
+ * pre-mutation snapshot rather than installing the server row: reseeding
+ * the cache would bump `version` and make the detail view discard the
+ * user's unsaved draft. The typed {@link DocumentVersionConflictError}
+ * still propagates so the caller can warn the user and preserve the draft.
  */
 export function useUpdateDocument(): UseMutationResult<Document, Error, UpdateDocumentInput> {
   const qc = useQueryClient();
@@ -273,14 +275,13 @@ export function useUpdateDocument(): UseMutationResult<Document, Error, UpdateDo
       }
       return { previous };
     },
-    onError: (err, input, ctx) => {
-      // On VERSION_CONFLICT the API hands us the row that won — install it so
-      // the next save uses the new version. Otherwise restore the snapshot we
-      // took in onMutate.
-      if (err instanceof DocumentVersionConflictError) {
-        qc.setQueryData(documentsKeys.detail(input.id), err.current);
-      }
-      else if (ctx?.previous) {
+    onError: (_err, input, ctx) => {
+      // Always restore the pre-mutation snapshot — including on
+      // VERSION_CONFLICT. Installing the server row here would change
+      // `version` and trigger the detail view to reseed its draft,
+      // silently discarding the user's unsaved edits. The component's
+      // onError surfaces the conflict and keeps the draft instead.
+      if (ctx?.previous) {
         qc.setQueryData(documentsKeys.detail(input.id), ctx.previous);
       }
     },

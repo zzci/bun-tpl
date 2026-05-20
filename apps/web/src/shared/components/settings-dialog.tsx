@@ -1,7 +1,6 @@
-import { Check, Copy, Loader2, Mail, Moon, Plus, Shield, ShieldAlert, Smartphone, Sun, Trash2, User as UserIcon, UsersRound } from "lucide-react";
+import { Check, Copy, Loader2, Mail, Plus, Shield, ShieldAlert, Smartphone, Trash2, User as UserIcon, UsersRound } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { useTheme } from "@/shared/components/theme-provider";
 import { Avatar, AvatarFallback } from "@/shared/components/ui/avatar";
 import { Badge } from "@/shared/components/ui/badge";
 import { Button } from "@/shared/components/ui/button";
@@ -18,15 +17,7 @@ import { Separator } from "@/shared/components/ui/separator";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/shared/components/ui/tabs";
 import { formatDate } from "@/shared/lib/format";
 import { http } from "@/shared/lib/http";
-import { cn } from "@/shared/lib/utils";
 import { useAuthStore } from "@/shared/stores/auth";
-
-const languages = [
-  { code: "zh", label: "中文" },
-  { code: "en", label: "English" },
-] as const;
-
-const themes = ["light", "dark", "system"] as const;
 
 function getInitials(name: string): string {
   return name
@@ -77,9 +68,8 @@ export function SettingsDialog({
 }
 
 function ProfileTab() {
-  const { t, i18n } = useTranslation(["common", "settings", "totp"]);
+  const { t } = useTranslation(["common", "settings", "totp"]);
   const { user } = useAuthStore();
-  const { theme, setTheme } = useTheme();
 
   if (!user)
     return null;
@@ -115,58 +105,6 @@ function ProfileTab() {
             <span className="truncate">{value}</span>
           </div>
         ))}
-      </div>
-
-      <Separator />
-
-      <div className="space-y-2">
-        <div className="text-xs font-medium text-muted-foreground uppercase tracking-wider">
-          {t("settings:language")}
-        </div>
-        <div className="flex gap-2">
-          {languages.map(lang => (
-            <button
-              key={lang.code}
-              type="button"
-              onClick={() => i18n.changeLanguage(lang.code)}
-              className={cn(
-                "flex-1 rounded-lg px-3 py-1.5 text-sm transition-colors",
-                i18n.language === lang.code
-                  ? "bg-primary/10 text-primary font-medium"
-                  : "bg-muted/50 text-muted-foreground hover:bg-muted",
-              )}
-            >
-              {lang.label}
-            </button>
-          ))}
-        </div>
-      </div>
-
-      <Separator />
-
-      <div className="space-y-2">
-        <div className="text-xs font-medium text-muted-foreground uppercase tracking-wider">
-          {t("settings:theme")}
-        </div>
-        <div className="flex gap-2">
-          {themes.map(t_ => (
-            <button
-              key={t_}
-              type="button"
-              onClick={() => setTheme(t_)}
-              className={cn(
-                "flex-1 flex items-center justify-center gap-1.5 rounded-lg px-3 py-1.5 text-sm transition-colors",
-                theme === t_
-                  ? "bg-primary/10 text-primary font-medium"
-                  : "bg-muted/50 text-muted-foreground hover:bg-muted",
-              )}
-            >
-              {t_ === "light" && <Sun className="size-3.5" />}
-              {t_ === "dark" && <Moon className="size-3.5" />}
-              {t(`theme.${t_}`)}
-            </button>
-          ))}
-        </div>
       </div>
     </div>
   );

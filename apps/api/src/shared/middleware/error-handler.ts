@@ -16,6 +16,21 @@ export function errorHandler(err: Error, c: Context<AppEnv>) {
     }, 422);
   }
 
+  // SQLite/libsql constraint violations are the DB-level backstop for
+  // check-then-write races (group/cron unique name, relation tuples).
+  // Surface them as an actionable 409 instead of an opaque 500. The raw
+  // message can name columns, so keep the response generic.
+  const code = (err as { code?: unknown }).code;
+  if (
+    (typeof code === "string" && code.startsWith("SQLITE_CONSTRAINT"))
+    || /\b(?:UNIQUE|CHECK|FOREIGN KEY|NOT NULL) constraint failed\b/i.test(err.message)
+  ) {
+    return c.json({
+      success: false,
+      error: { code: "CONFLICT", message: "Resource already exists or violates a constraint" },
+    }, 409);
+  }
+
   c.get("logger").error({ err }, "unhandled error");
   return c.json({ success: false, error: { code: "INTERNAL_ERROR", message: "Internal server error" } }, 500);
 }

@@ -7,6 +7,11 @@ import { getNamespace, getValidRelations } from "./namespace-config";
 
 const nanoid = customAlphabet("0123456789abcdefghijklmnopqrstuvwxyz", 8);
 
+// The drizzle transaction callback receives a tx handle that is API-compatible
+// with the db for queries but not structurally `AppDatabase` (no .transaction
+// /.close). Helpers that must run either standalone or inside a tx accept this.
+type TxOrDb = AppDatabase | Parameters<Parameters<AppDatabase["transaction"]>[0]>[0];
+
 export interface CreateTupleInput {
   readonly namespace: string;
   readonly objectId: string;
@@ -62,7 +67,7 @@ export async function getTupleById(db: AppDatabase, id: string): Promise<Relatio
   return await db.select().from(relationTuples).where(eq(relationTuples.id, id)).get();
 }
 
-async function checkDuplicateTuple(db: AppDatabase, input: CreateTupleInput): Promise<void> {
+async function checkDuplicateTuple(db: TxOrDb, input: CreateTupleInput): Promise<void> {
   const subjectRelation = input.subjectRelation ?? null;
 
   const subjectRelationCondition = subjectRelation === null
@@ -93,11 +98,9 @@ async function checkDuplicateTuple(db: AppDatabase, input: CreateTupleInput): Pr
 
 export async function createTuple(db: AppDatabase, input: CreateTupleInput, createdBy: string): Promise<RelationTuple> {
   validateTupleInput(input);
-  await checkDuplicateTuple(db, input);
 
   const id = nanoid();
   const now = new Date().toISOString();
-
   const values = {
     id,
     namespace: input.namespace,
@@ -110,7 +113,14 @@ export async function createTuple(db: AppDatabase, input: CreateTupleInput, crea
     createdAt: now,
   };
 
-  await db.insert(relationTuples).values(values).run();
+  // BEGIN IMMEDIATE (libsql sqlite3 client default) takes the write lock at
+  // transaction start, so the duplicate check + insert serialize against
+  // concurrent writers — the only protection for NULL subjectRelation rows,
+  // which idx_tuples_unique cannot enforce (SQLite treats NULLs as distinct).
+  await db.transaction(async (tx) => {
+    await checkDuplicateTuple(tx, input);
+    await tx.insert(relationTuples).values(values).run();
+  });
 
   return values;
 }
@@ -171,14 +181,16 @@ export async function batchCreateTuples(db: AppDatabase, inputs: readonly Create
   for (const input of inputs) {
     validateTupleInput(input);
   }
-  for (const input of inputs) {
-    await checkDuplicateTuple(db, input);
-  }
 
   const now = new Date().toISOString();
   const tuples: RelationTuple[] = [];
 
   await db.transaction(async (tx) => {
+    // Dedup check inside the (BEGIN IMMEDIATE) tx so it serializes with the
+    // inserts against concurrent writers.
+    for (const input of inputs) {
+      await checkDuplicateTuple(tx, input);
+    }
     for (const input of inputs) {
       const id = nanoid();
       const values = {

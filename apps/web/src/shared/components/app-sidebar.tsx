@@ -1,16 +1,22 @@
 import { Link, useRouterState } from "@tanstack/react-router";
-import { LogOut, Settings } from "lucide-react";
+import { Languages, LogOut, Monitor, Moon, Palette, Settings, Sun } from "lucide-react";
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Logo } from "@/shared/components/logo";
 import { SettingsDialog } from "@/shared/components/settings-dialog";
 import { getNavItems } from "@/shared/components/sidebar/registry";
+import { useTheme } from "@/shared/components/theme-provider";
 import { Avatar, AvatarFallback } from "@/shared/components/ui/avatar";
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
+  DropdownMenuRadioGroup,
+  DropdownMenuRadioItem,
   DropdownMenuSeparator,
+  DropdownMenuSub,
+  DropdownMenuSubContent,
+  DropdownMenuSubTrigger,
   DropdownMenuTrigger,
 } from "@/shared/components/ui/dropdown-menu";
 import {
@@ -26,6 +32,17 @@ import {
 } from "@/shared/components/ui/sidebar";
 import { TooltipProvider } from "@/shared/components/ui/tooltip";
 import { useAuthStore } from "@/shared/stores/auth";
+
+const LANGUAGES = [
+  { code: "zh", label: "中文" },
+  { code: "en", label: "English" },
+] as const;
+
+const THEMES = [
+  { value: "light", icon: Sun },
+  { value: "dark", icon: Moon },
+  { value: "system", icon: Monitor },
+] as const;
 
 // ---------- Helpers ----------
 
@@ -54,7 +71,8 @@ function getInitials(name: string): string {
 // ============================================================
 
 export function AppSidebar() {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation(["common", "settings"]);
+  const { theme, setTheme } = useTheme();
   const { user, logout } = useAuthStore();
   const routerState = useRouterState();
   const currentPath = routerState.location.pathname;
@@ -153,6 +171,44 @@ export function AppSidebar() {
                       <Settings className="mr-2 size-4" />
                       {t("nav.settings")}
                     </DropdownMenuItem>
+                    <DropdownMenuSeparator />
+                    <DropdownMenuSub>
+                      <DropdownMenuSubTrigger>
+                        <Languages className="mr-2 size-4" />
+                        {t("settings:language")}
+                      </DropdownMenuSubTrigger>
+                      <DropdownMenuSubContent>
+                        <DropdownMenuRadioGroup
+                          value={i18n.language}
+                          onValueChange={lng => void i18n.changeLanguage(lng)}
+                        >
+                          {LANGUAGES.map(lang => (
+                            <DropdownMenuRadioItem key={lang.code} value={lang.code}>
+                              {lang.label}
+                            </DropdownMenuRadioItem>
+                          ))}
+                        </DropdownMenuRadioGroup>
+                      </DropdownMenuSubContent>
+                    </DropdownMenuSub>
+                    <DropdownMenuSub>
+                      <DropdownMenuSubTrigger>
+                        <Palette className="mr-2 size-4" />
+                        {t("settings:theme")}
+                      </DropdownMenuSubTrigger>
+                      <DropdownMenuSubContent>
+                        <DropdownMenuRadioGroup
+                          value={theme}
+                          onValueChange={v => setTheme(v as typeof THEMES[number]["value"])}
+                        >
+                          {THEMES.map(({ value, icon: Icon }) => (
+                            <DropdownMenuRadioItem key={value} value={value}>
+                              <Icon className="mr-2 size-4" />
+                              {t(`theme.${value}`)}
+                            </DropdownMenuRadioItem>
+                          ))}
+                        </DropdownMenuRadioGroup>
+                      </DropdownMenuSubContent>
+                    </DropdownMenuSub>
                     <DropdownMenuSeparator />
                     <DropdownMenuItem
                       variant="destructive"

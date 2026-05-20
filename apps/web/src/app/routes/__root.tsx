@@ -16,7 +16,10 @@ export const Route = createRootRoute({
 const BYPASS_SUFFIXES = ["/setup", "/unlock", "/denied", "/login", "/totp-verify", "/error"];
 
 function redirectToLogin() {
-  const current = window.location.pathname;
+  // Carry the query string too so deep-link context (filters, ids,
+  // tabs) survives the session-expiry bounce — matches the redirect
+  // value `_app.tsx` builds for its own guard.
+  const current = window.location.pathname + window.location.search;
   if (BYPASS_SUFFIXES.some(s => current.startsWith(`${BASE_PATH}${s}`)))
     return;
   window.location.href = `${BASE_PATH}/login?redirect=${encodeURIComponent(current)}`;

@@ -11,7 +11,6 @@ import {
   SidebarProvider,
   SidebarTrigger,
 } from "@/shared/components/ui/sidebar";
-import { http, HttpError, SystemLockedError } from "@/shared/lib/http";
 import { useAuthStore } from "@/shared/stores/auth";
 import { useSystemStore } from "@/shared/stores/system";
 
@@ -25,28 +24,15 @@ function AppLayout() {
   const systemStatus = useSystemStore(s => s.status);
   const { user, loading, fetchUser } = useAuthStore();
   // Track network failure separately so we can distinguish "couldn't reach
-  // server" from a clean 401 unauthenticated response. The auth store
-  // collapses both into `user: null`, so we probe directly here.
+  // server" from a clean 401 unauthenticated response. `fetchUser` now
+  // categorises the failure for us in a single request.
   const [networkError, setNetworkError] = useState(false);
 
   const loadUser = useCallback(async () => {
     setNetworkError(false);
-    try {
-      // Probe /account/me ourselves so we can categorise the failure.
-      // A successful or 401 response keeps `networkError = false`; anything
-      // else (network error, 5xx, etc.) flips it on.
-      await http("/account/me");
-    }
-    catch (err) {
-      if (err instanceof SystemLockedError)
-        return;
-      if (!(err instanceof HttpError) || err.status >= 500) {
-        setNetworkError(true);
-        return;
-      }
-      // HttpError with status < 500 (e.g. 401) is a clean failure.
-    }
-    await fetchUser();
+    const result = await fetchUser();
+    if (result.kind === "networkError")
+      setNetworkError(true);
   }, [fetchUser]);
 
   useEffect(() => {

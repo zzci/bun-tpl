@@ -1,8 +1,10 @@
 /* eslint-disable react-refresh/only-export-components */
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { createLazyFileRoute } from "@tanstack/react-router";
+import { Pencil, Trash2 } from "lucide-react";
 import { useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
+import { toast } from "sonner";
 import { Badge } from "@/shared/components/ui/badge";
 import { Button } from "@/shared/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/shared/components/ui/card";
@@ -13,14 +15,16 @@ import {
   ComboboxItem,
   ComboboxList,
 } from "@/shared/components/ui/combobox";
-import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/shared/components/ui/dialog";
+import { Dialog, DialogClose, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/shared/components/ui/dialog";
 import { Input } from "@/shared/components/ui/input";
 import { Label } from "@/shared/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/shared/components/ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/shared/components/ui/table";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/shared/components/ui/tabs";
+import { errorMessage } from "@/shared/lib/errors";
 import { formatDate } from "@/shared/lib/format";
 import { http } from "@/shared/lib/http";
+import { cn } from "@/shared/lib/utils";
 
 export const Route = createLazyFileRoute("/_app/admin/policies")({
   component: PoliciesPage,
@@ -527,6 +531,8 @@ interface ResourceGroupMembersResponse {
 function ResourceGroupManager() {
   const { t } = useTranslation("policies");
   const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [editGroup, setEditGroup] = useState<ResourceGroup | null>(null);
+  const [deleteConfirm, setDeleteConfirm] = useState<ResourceGroup | null>(null);
   const queryClient = useQueryClient();
 
   const { data: groupsData, isLoading } = useQuery({
@@ -535,11 +541,16 @@ function ResourceGroupManager() {
   });
 
   const deleteMutation = useMutation({
-    mutationFn: (id: string) => http(`/resource-groups/${id}`, { method: "DELETE" }),
-    onSuccess: (_data, id) => {
+    mutationFn: (group: ResourceGroup) => http(`/policy/resource-groups/${group.id}`, { method: "DELETE" }),
+    onSuccess: (_data, group) => {
       queryClient.invalidateQueries({ queryKey: ["resource-groups"] });
-      if (selectedId === id)
+      if (selectedId === group.id)
         setSelectedId(null);
+      setDeleteConfirm(null);
+      toast.success(t("toast.resourceGroupDeleted", { name: group.name }));
+    },
+    onError: (err) => {
+      toast.error(errorMessage(err, t("common.error.deleteFailed", { ns: "common" })));
     },
   });
 
@@ -563,37 +574,59 @@ function ResourceGroupManager() {
             : groups.length === 0
               ? <p className="text-sm text-muted-foreground">{t("noResourceGroups")}</p>
               : (
-                  <div className="space-y-2">
-                    {groups.map(group => (
-                      <div
-                        key={group.id}
-                        className={`flex items-center justify-between rounded-md border px-3 py-2 cursor-pointer transition-colors ${selectedId === group.id ? "bg-muted/50 border-primary/50" : "hover:bg-muted/30"}`}
-                        role="button"
-                        tabIndex={0}
-                        onClick={() => setSelectedId(group.id)}
-                        onKeyDown={(e) => {
-                          if (e.key === "Enter" || e.key === " ")
-                            setSelectedId(group.id);
-                        }}
-                      >
-                        <div>
-                          <p className="text-sm font-medium">{group.name}</p>
-                          {group.description && <p className="text-xs text-muted-foreground">{group.description}</p>}
-                        </div>
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          className="text-destructive hover:text-destructive"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            deleteMutation.mutate(group.id);
+                  <div className="space-y-1.5">
+                    {groups.map((group) => {
+                      const active = selectedId === group.id;
+                      return (
+                        <div
+                          key={group.id}
+                          className={cn(
+                            "group flex items-center gap-3 rounded-md border px-3 py-2.5 cursor-pointer transition-colors",
+                            active ? "border-primary bg-primary/5" : "hover:bg-muted/50",
+                          )}
+                          role="button"
+                          tabIndex={0}
+                          aria-pressed={active}
+                          onClick={() => setSelectedId(group.id)}
+                          onKeyDown={(e) => {
+                            if (e.key === "Enter" || e.key === " ") {
+                              e.preventDefault();
+                              setSelectedId(group.id);
+                            }
                           }}
-                          disabled={deleteMutation.isPending}
                         >
-                          {t("common.delete")}
-                        </Button>
-                      </div>
-                    ))}
+                          <div className="min-w-0 flex-1">
+                            <p className="text-sm font-medium truncate">{group.name}</p>
+                            {group.description && (
+                              <p className="text-xs text-muted-foreground truncate">{group.description}</p>
+                            )}
+                          </div>
+                          <div
+                            className="flex shrink-0 gap-0.5 opacity-0 transition-opacity group-hover:opacity-100 group-focus-within:opacity-100 data-[active=true]:opacity-100"
+                            data-active={active}
+                            onClick={e => e.stopPropagation()}
+                          >
+                            <Button
+                              variant="ghost"
+                              size="icon-sm"
+                              aria-label={t("common.edit")}
+                              onClick={() => setEditGroup(group)}
+                            >
+                              <Pencil className="size-3.5" />
+                            </Button>
+                            <Button
+                              variant="ghost"
+                              size="icon-sm"
+                              aria-label={t("common.delete")}
+                              className="text-destructive hover:text-destructive"
+                              onClick={() => setDeleteConfirm(group)}
+                            >
+                              <Trash2 className="size-3.5" />
+                            </Button>
+                          </div>
+                        </div>
+                      );
+                    })}
                   </div>
                 )}
         </CardContent>
@@ -610,7 +643,114 @@ function ResourceGroupManager() {
             : <p className="text-sm text-muted-foreground">{t("selectResourceGroup")}</p>}
         </CardContent>
       </Card>
+
+      <EditResourceGroupDialog group={editGroup} onClose={() => setEditGroup(null)} />
+
+      <Dialog
+        open={deleteConfirm !== null}
+        onOpenChange={(open) => {
+          if (!open)
+            setDeleteConfirm(null);
+        }}
+      >
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>{t("deleteResourceGroupTitle")}</DialogTitle>
+            <DialogDescription>
+              {t("deleteResourceGroupConfirm", { name: deleteConfirm?.name })}
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <DialogClose render={<Button type="button" variant="outline">{t("common.cancel")}</Button>} />
+            <Button
+              variant="destructive"
+              onClick={() => deleteConfirm && deleteMutation.mutate(deleteConfirm)}
+              disabled={deleteMutation.isPending}
+            >
+              {t("common.delete")}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
+  );
+}
+
+function EditResourceGroupDialog({
+  group,
+  onClose,
+}: {
+  readonly group: ResourceGroup | null;
+  readonly onClose: () => void;
+}) {
+  return (
+    <Dialog
+      open={group !== null}
+      onOpenChange={(open) => {
+        if (!open)
+          onClose();
+      }}
+    >
+      <DialogContent>
+        {group && <EditResourceGroupForm key={group.id} group={group} onClose={onClose} />}
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+function EditResourceGroupForm({
+  group,
+  onClose,
+}: {
+  readonly group: ResourceGroup;
+  readonly onClose: () => void;
+}) {
+  const { t } = useTranslation("policies");
+  const [name, setName] = useState(group.name);
+  const [description, setDescription] = useState(group.description ?? "");
+  const queryClient = useQueryClient();
+
+  const mutation = useMutation({
+    mutationFn: () => http(`/policy/resource-groups/${group.id}`, {
+      method: "PATCH",
+      body: JSON.stringify({ name: name.trim(), description: description.trim() || null }),
+    }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["resource-groups"] });
+      toast.success(t("toast.resourceGroupUpdated", { name: name.trim() }));
+      onClose();
+    },
+    onError: (err) => {
+      toast.error(errorMessage(err, t("common.error.saveFailed", { ns: "common" })));
+    },
+  });
+
+  return (
+    <>
+      <DialogHeader>
+        <DialogTitle>{t("editResourceGroupTitle")}</DialogTitle>
+        <DialogDescription>{t("editResourceGroupDescription")}</DialogDescription>
+      </DialogHeader>
+      <div className="space-y-4 py-4">
+        <div className="space-y-2">
+          <Label>{t("resourceGroupName")}</Label>
+          <Input value={name} onChange={e => setName(e.target.value)} placeholder={t("resourceGroupNamePlaceholder")} />
+        </div>
+        <div className="space-y-2">
+          <Label>{t("resourceGroupDescription")}</Label>
+          <Input value={description} onChange={e => setDescription(e.target.value)} placeholder={t("resourceGroupDescriptionPlaceholder")} />
+        </div>
+      </div>
+      <DialogFooter>
+        <Button variant="outline" onClick={onClose}>{t("common.cancel")}</Button>
+        <Button
+          onClick={() => mutation.mutate()}
+          disabled={!name.trim() || mutation.isPending}
+        >
+          {mutation.isPending ? t("common.saving") : t("common.save")}
+        </Button>
+      </DialogFooter>
+    </>
   );
 }
 
@@ -628,9 +768,13 @@ function CreateResourceGroupDialog() {
     }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["resource-groups"] });
+      toast.success(t("toast.resourceGroupCreated", { name: name.trim() }));
       setOpen(false);
       setName("");
       setDescription("");
+    },
+    onError: (err) => {
+      toast.error(errorMessage(err, t("common.error.saveFailed", { ns: "common" })));
     },
   });
 
@@ -652,9 +796,6 @@ function CreateResourceGroupDialog() {
             <Input value={description} onChange={e => setDescription(e.target.value)} placeholder={t("resourceGroupDescriptionPlaceholder")} />
           </div>
         </div>
-        {mutation.error && (
-          <p className="text-sm text-destructive">{(mutation.error as Error).message}</p>
-        )}
         <DialogFooter>
           <Button variant="outline" onClick={() => setOpen(false)}>{t("common.cancel")}</Button>
           <Button
@@ -675,13 +816,17 @@ function ResourceGroupMemberList({ groupId }: { readonly groupId: string }) {
 
   const { data: membersData, isLoading } = useQuery({
     queryKey: ["resource-group-members", groupId],
-    queryFn: () => http<ResourceGroupMembersResponse>(`/resource-groups/${groupId}/members`),
+    queryFn: () => http<ResourceGroupMembersResponse>(`/policy/resource-groups/${groupId}/members`),
   });
 
   const removeMutation = useMutation({
-    mutationFn: (tupleId: string) => http(`/resource-groups/${groupId}/members/${tupleId}`, { method: "DELETE" }),
+    mutationFn: (tupleId: string) => http(`/policy/resource-groups/${groupId}/members/${tupleId}`, { method: "DELETE" }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["resource-group-members", groupId] });
+      toast.success(t("toast.memberRemoved"));
+    },
+    onError: (err) => {
+      toast.error(errorMessage(err, t("common.error.operationFailed", { ns: "common" })));
     },
   });
 

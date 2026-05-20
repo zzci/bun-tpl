@@ -62,6 +62,7 @@ if (dexBlockSealed()) {
 }
 
 const children: Subprocess[] = [];
+let shuttingDown = false;
 
 function spawn(cmd: string[], label: string): Subprocess {
   const proc = Bun.spawn(cmd, {
@@ -80,7 +81,6 @@ function spawn(cmd: string[], label: string): Subprocess {
   return proc;
 }
 
-let shuttingDown = false;
 async function shutdown(): Promise<void> {
   if (shuttingDown)
     return;

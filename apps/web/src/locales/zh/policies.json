@@ -63,6 +63,16 @@
   "editTupleTitle": "编辑元组",
   "editTupleDescription": "修改此元组的关系。",
   "createResourceGroupTitle": "创建资源组",
+  "editResourceGroupTitle": "编辑资源组",
+  "editResourceGroupDescription": "重命名该资源组或修改其描述。",
+  "deleteResourceGroupTitle": "删除资源组",
+  "deleteResourceGroupConfirm": "确定删除资源组「{{name}}」？此操作不可撤销。",
+  "toast": {
+    "resourceGroupCreated": "资源组「{{name}}」已创建。",
+    "resourceGroupUpdated": "资源组「{{name}}」已更新。",
+    "resourceGroupDeleted": "资源组「{{name}}」已删除。",
+    "memberRemoved": "成员已移除。"
+  },
   "resourceGroupList": "资源组",
   "resourceGroupListDescription": "管理资源组及其成员。",
   "resourceGroupName": "组名称",

@@ -24,6 +24,7 @@ import {
   getResourceGroupMembers,
   listResourceGroups,
   removeResourceGroupMember,
+  updateResourceGroup,
 } from "./resource-group.service";
 import { getRouteBindingsForResource } from "./route-registry";
 import { check, expand } from "./zanzibar.engine";
@@ -337,6 +338,32 @@ export function policyRoutes() {
     });
 
     return c.json({ success: true, data: group }, 201);
+  });
+
+  router.patch("/policy/resource-groups/:id", authRequired, adminRequired, async (c) => {
+    const db = c.get("db");
+    const user = c.get("user")!;
+    const id = c.req.param("id");
+    const body = z.object({
+      name: z.string().min(1).max(100),
+      description: z.string().max(500).nullable().default(null),
+    }).parse(await c.req.json());
+
+    const group = await updateResourceGroup(db, id, body);
+
+    await audit(db, c.get("logger"), {
+      actorId: user.id,
+      actorName: user.name,
+      action: "resource_group.updated",
+      resourceType: "resource_group",
+      resourceId: group.id,
+      resourceName: group.name,
+      ip: getClientIp(c),
+      userAgent: c.req.header("user-agent") ?? "unknown",
+      result: "success",
+    });
+
+    return c.json({ success: true, data: group });
   });
 
   router.delete("/policy/resource-groups/:id", authRequired, adminRequired, async (c) => {

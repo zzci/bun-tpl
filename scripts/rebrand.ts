@@ -64,6 +64,10 @@ interface Change {
 }
 const changes: Change[] = [];
 
+// Set when at least one package.json scope was actually rewritten, so the
+// final report can loudly flag the now-stale bun.lock.
+let scopeRenamed = false;
+
 function write(file: string, content: string, note: string): void {
   const path = resolve(ROOT, file);
   if (DRY_RUN) {
@@ -201,12 +205,15 @@ rewriteDockerfile();
 
 // ─── 1d. Source fallback literals ───
 // `rebrand.ts` rewrites .env so a fork's *runtime* APP_NAME is correct,
-// but two dev scripts and the config schema hard-code `"app"` / `"App"`
-// as the last-resort fallback used when the env var is unset (commented
-// .env, CI without .env, `bun run dev:dex` before the operator edits
-// .env). Without this step a freshly rebranded fork still prints / serves
-// the template slug from those paths. Match only the exact template
-// literal so a fork that already customised the fallback by hand survives.
+// but two dev scripts, the web vite config, and the config schema
+// hard-code `"app"` / `"App"` as the last-resort fallback used when the
+// env var is unset (commented .env, CI without .env, `bun run dev` /
+// `bun run dev:dex` before the operator edits .env). The vite config
+// fallback is what the document <title> resolves to, so missing it
+// leaves a rebranded fork still serving "App". Without this step a
+// freshly rebranded fork still prints / serves the template slug from
+// those paths. Match only the exact template literal so a fork that
+// already customised the fallback by hand survives.
 function rewriteSourceFallbacks(): void {
   if (APP_NAME === undefined && APP_DISPLAY === undefined)
     return;
@@ -227,6 +234,39 @@ function rewriteSourceFallbacks(): void {
       );
       if (next !== text)
         write(rel, next, "rewrite APP_NAME fallback literal");
+    }
+  }
+
+  // web vite config: `process.env.APP_NAME ?? "app"` /
+  // `process.env.APP_DISPLAY_NAME ?? "App"`. These resolve the document
+  // <title> at config-load time; `bun run dev` does not forward .env into
+  // the vite child, so without this rewrite a rebranded fork keeps the
+  // template title in dev.
+  {
+    const viteRel = "apps/web/vite.config.ts";
+    let text: string | undefined;
+    try {
+      text = readFileSync(resolve(ROOT, viteRel), "utf-8");
+    }
+    catch {
+      text = undefined;
+    }
+    if (text !== undefined) {
+      let next = text;
+      if (APP_NAME !== undefined) {
+        next = next.replace(
+          /(process\.env\.APP_NAME \?\? ")app(")/g,
+          `$1${APP_NAME}$2`,
+        );
+      }
+      if (APP_DISPLAY !== undefined) {
+        next = next.replace(
+          /(process\.env\.APP_DISPLAY_NAME \?\? ")App(")/g,
+          `$1${APP_DISPLAY}$2`,
+        );
+      }
+      if (next !== text)
+        write(viteRel, next, "rewrite APP_NAME / APP_DISPLAY_NAME fallback literal");
     }
   }
 
@@ -257,6 +297,37 @@ function rewriteSourceFallbacks(): void {
 }
 rewriteSourceFallbacks();
 
+// ─── 1e. README.md ───
+// Conservative literal replacements only — the README is prose, so we touch
+// just the two unambiguous template-name surfaces: the `# App Template` H1
+// (display name) and the `app.localhost` dev hostname (slug, mirrors the
+// .env rewrite in step 1). Anything subtler (feature copy, prose mentions of
+// "app") is left for the operator. Dry-run honoured via `write`.
+function rewriteReadme(): void {
+  if (APP_NAME === undefined && APP_DISPLAY === undefined)
+    return;
+  const path = "README.md";
+  let text: string;
+  try {
+    text = readFileSync(resolve(ROOT, path), "utf-8");
+  }
+  catch {
+    return;
+  }
+  let next = text;
+  if (APP_DISPLAY !== undefined) {
+    // Top-of-file H1 only — match the exact template literal so a fork
+    // that already retitled the README survives.
+    next = next.replace(/^# App Template$/m, `# ${APP_DISPLAY}`);
+  }
+  if (APP_NAME !== undefined) {
+    next = next.replace(/(\bhttps?:\/\/)app\.localhost\b/g, `$1${APP_NAME}.localhost`);
+  }
+  if (next !== text)
+    write(path, next, "rewrite README H1 / app.localhost dev host");
+}
+rewriteReadme();
+
 // ─── 2. package.json files ───
 const manifestGlobs = ["package.json", "apps/*/package.json", "packages/*/package.json"];
 const manifests: string[] = [];
@@ -279,10 +350,14 @@ for (const rel of manifests) {
   const json = JSON.parse(raw) as Manifest;
   const before = JSON.stringify(json);
 
-  if (SCOPE && typeof json.name === "string" && json.name.startsWith("@app/"))
+  if (SCOPE && typeof json.name === "string" && json.name.startsWith("@app/")) {
     json.name = json.name.replace(/^@app\//, `@${SCOPE}/`);
-  if (SCOPE && json.name === "@app/monorepo")
+    scopeRenamed = true;
+  }
+  if (SCOPE && json.name === "@app/monorepo") {
     json.name = `@${SCOPE}/monorepo`;
+    scopeRenamed = true;
+  }
 
   if (DESCRIPTION !== undefined && rel === "package.json")
     json.description = DESCRIPTION;
@@ -313,5 +388,18 @@ console.log("\n[rebrand] manual follow-up:");
 console.log("  - git remote set-url origin <your-fork-url>");
 console.log("  - Replace apps/web/public/logo.svg with your logo");
 console.log("  - Update the inline SVG in apps/web/src/shared/components/logo.tsx");
-console.log("  - bun install   # regenerate bun.lock if the package scope changed");
 console.log("  - bun run check # verify lint + typecheck + test + build still pass");
+
+// A package-scope rename leaves bun.lock referencing the old `@app/*`
+// names, which makes `bun install --frozen-lockfile` fail on forks and CI.
+// We deliberately do NOT run `bun install` here — it is heavy and
+// side-effecty for a rewrite tool — so shout about the required follow-up
+// instead. Dry-run still warns since the scope WOULD have changed.
+if (scopeRenamed || (DRY_RUN && SCOPE)) {
+  console.log("");
+  console.log("  ============================================================");
+  console.log("  !! ACTION REQUIRED: bun.lock is now STALE (package scope changed)");
+  console.log("  !! Run `bun install` and commit the updated bun.lock, or CI");
+  console.log("  !! (`bun install --frozen-lockfile`) will FAIL on this fork.");
+  console.log("  ============================================================");
+}

@@ -57,6 +57,7 @@
     "replyingTo": "Replying to",
     "replyMissing": "Original comment deleted",
     "noComments": "No comments yet.",
+    "showOlder": "Show {{count}} older comments",
     "deleteTitle": "Delete Comment",
     "deleteConfirm": "Are you sure you want to delete this comment?",
     "justNow": "just now",

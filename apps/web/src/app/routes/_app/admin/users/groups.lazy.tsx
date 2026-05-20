@@ -1,10 +1,11 @@
 /* eslint-disable react-refresh/only-export-components */
 import { createLazyFileRoute } from "@tanstack/react-router";
-import { ChevronRight, Pencil, Plus, Trash2, UserPlus, X } from "lucide-react";
+import { Pencil, Plus, Trash2, UserPlus } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Badge } from "@/shared/components/ui/badge";
 import { Button } from "@/shared/components/ui/button";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/shared/components/ui/card";
 import {
   Dialog,
   DialogClose,
@@ -17,14 +18,6 @@ import {
 } from "@/shared/components/ui/dialog";
 import { Input } from "@/shared/components/ui/input";
 import { Label } from "@/shared/components/ui/label";
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/shared/components/ui/table";
 import { Textarea } from "@/shared/components/ui/textarea";
 import { http } from "@/shared/lib/http";
 import { cn } from "@/shared/lib/utils";
@@ -82,13 +75,17 @@ function GroupsTab() {
   const [createOpen, setCreateOpen] = useState(false);
   const [editGroup, setEditGroup] = useState<Group | null>(null);
   const [deleteConfirm, setDeleteConfirm] = useState<Group | null>(null);
-  const [memberGroup, setMemberGroup] = useState<Group | null>(null);
+  const [selectedId, setSelectedId] = useState<string | null>(null);
   const [members, setMembers] = useState<GroupMember[]>([]);
   const [membersLoading, setMembersLoading] = useState(false);
   const [addMemberOpen, setAddMemberOpen] = useState(false);
   const [userSearch, setUserSearch] = useState("");
   const [searchResults, setSearchResults] = useState<UserSearchItem[]>([]);
   const searchTimerRef = useRef<ReturnType<typeof setTimeout>>(undefined);
+
+  // Derive the selected group from the live list so an edit/rename reflects
+  // immediately in the member panel header instead of a stale snapshot.
+  const selectedGroup = groups.find(g => g.id === selectedId) ?? null;
 
   const fetchGroups = useCallback(async () => {
     setLoading(true);
@@ -123,8 +120,8 @@ function GroupsTab() {
     }
   }, [t]);
 
-  const openMembers = (group: Group) => {
-    setMemberGroup(group);
+  const selectGroup = (group: Group) => {
+    setSelectedId(group.id);
     void fetchMembers(group.id);
   };
 
@@ -147,17 +144,17 @@ function GroupsTab() {
   };
 
   const addMember = async (userId: string) => {
-    if (!memberGroup)
+    if (!selectedId)
       return;
     try {
-      await http(`/account/groups/${memberGroup.id}/members`, {
+      await http(`/account/groups/${selectedId}/members`, {
         method: "POST",
         body: JSON.stringify({ userId }),
       });
       setAddMemberOpen(false);
       setUserSearch("");
       setSearchResults([]);
-      void fetchMembers(memberGroup.id);
+      void fetchMembers(selectedId);
       void fetchGroups();
     }
     catch (err) {
@@ -166,11 +163,11 @@ function GroupsTab() {
   };
 
   const removeMember = async (userId: string) => {
-    if (!memberGroup)
+    if (!selectedId)
       return;
     try {
-      await http(`/account/groups/${memberGroup.id}/members/${userId}`, { method: "DELETE" });
-      void fetchMembers(memberGroup.id);
+      await http(`/account/groups/${selectedId}/members/${userId}`, { method: "DELETE" });
+      void fetchMembers(selectedId);
       void fetchGroups();
     }
     catch (err) {
@@ -183,8 +180,8 @@ function GroupsTab() {
       return;
     try {
       await http(`/account/groups/${deleteConfirm.id}`, { method: "DELETE" });
-      if (memberGroup?.id === deleteConfirm.id)
-        setMemberGroup(null);
+      if (selectedId === deleteConfirm.id)
+        setSelectedId(null);
       setDeleteConfirm(null);
       void fetchGroups();
     }
@@ -196,34 +193,6 @@ function GroupsTab() {
 
   return (
     <div className="space-y-4">
-      <div className="flex items-center justify-between">
-        <div />
-        <Dialog open={createOpen} onOpenChange={setCreateOpen}>
-          <DialogTrigger render={(
-            <Button>
-              <Plus className="mr-1 size-4" />
-              {t("create")}
-            </Button>
-          )}
-          />
-          <DialogContent>
-            <GroupFormDialog
-              onSubmit={async (name, description) => {
-                await http("/account/groups", {
-                  method: "POST",
-                  body: JSON.stringify({ name, description: description || undefined }),
-                });
-                setCreateOpen(false);
-                void fetchGroups();
-              }}
-              title={t("createTitle")}
-              description={t("createDescription")}
-              submitLabel={t("create")}
-            />
-          </DialogContent>
-        </Dialog>
-      </div>
-
       {error && (
         <div className="rounded-md border border-destructive/50 bg-destructive/10 px-3 py-2 text-sm text-destructive">
           {error}
@@ -254,125 +223,150 @@ function GroupsTab() {
         </DialogContent>
       </Dialog>
 
-      <div className={cn("grid gap-4", memberGroup && "lg:grid-cols-2")}>
+      <div className="grid gap-4 lg:grid-cols-2">
         {/* Group list */}
-        <div className="rounded-md border">
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>{t("col.name")}</TableHead>
-                <TableHead className="w-20 text-center">{t("col.members")}</TableHead>
-                <TableHead className="w-32">{t("col.actions")}</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody aria-busy={loading}>
-              {loading
-                ? (
-                    <TableRow>
-                      <TableCell colSpan={3} className="h-24 text-center text-muted-foreground">
-                        {t("common.loading")}
-                      </TableCell>
-                    </TableRow>
-                  )
-                : groups.length === 0
-                  ? (
-                      <TableRow>
-                        <TableCell colSpan={3} className="h-24 text-center text-muted-foreground">
-                          {t("noResults")}
-                        </TableCell>
-                      </TableRow>
-                    )
-                  : groups.map(group => (
-                      <TableRow
-                        key={group.id}
-                        className={cn(
-                          "cursor-pointer transition-colors",
-                          memberGroup?.id === group.id
-                            ? "bg-primary/5 hover:bg-primary/10"
-                            : "hover:bg-muted/50",
-                        )}
-                        onClick={() => openMembers(group)}
-                      >
-                        <TableCell>
-                          <div className="flex items-center gap-2">
+        <Card>
+          <CardHeader>
+            <div className="flex items-center justify-between gap-2">
+              <div>
+                <CardTitle>{t("listTitle")}</CardTitle>
+                <CardDescription>{t("listDescription")}</CardDescription>
+              </div>
+              <Dialog open={createOpen} onOpenChange={setCreateOpen}>
+                <DialogTrigger render={(
+                  <Button size="sm">
+                    <Plus className="mr-1 size-4" />
+                    {t("create")}
+                  </Button>
+                )}
+                />
+                <DialogContent>
+                  <GroupFormDialog
+                    onSubmit={async (name, description) => {
+                      await http("/account/groups", {
+                        method: "POST",
+                        body: JSON.stringify({ name, description: description || undefined }),
+                      });
+                      setCreateOpen(false);
+                      void fetchGroups();
+                    }}
+                    title={t("createTitle")}
+                    description={t("createDescription")}
+                    submitLabel={t("create")}
+                  />
+                </DialogContent>
+              </Dialog>
+            </div>
+          </CardHeader>
+          <CardContent>
+            {loading
+              ? <p className="text-sm text-muted-foreground">{t("common.loading")}</p>
+              : groups.length === 0
+                ? <p className="text-sm text-muted-foreground">{t("noResults")}</p>
+                : (
+                    <div className="space-y-1.5">
+                      {groups.map((group) => {
+                        const active = selectedId === group.id;
+                        return (
+                          <div
+                            key={group.id}
+                            className={cn(
+                              "group flex items-center gap-3 rounded-md border px-3 py-2.5 cursor-pointer transition-colors",
+                              active
+                                ? "border-primary bg-primary/5"
+                                : "hover:bg-muted/50",
+                            )}
+                            role="button"
+                            tabIndex={0}
+                            aria-pressed={active}
+                            onClick={() => selectGroup(group)}
+                            onKeyDown={(e) => {
+                              if (e.key === "Enter" || e.key === " ") {
+                                e.preventDefault();
+                                selectGroup(group);
+                              }
+                            }}
+                          >
                             <div className="min-w-0 flex-1">
-                              <div className="font-medium">{group.name}</div>
+                              <div className="flex items-center gap-2">
+                                <span className="font-medium truncate">{group.name}</span>
+                                <Badge variant="secondary" className="shrink-0">{group.memberCount}</Badge>
+                              </div>
                               {group.description && (
-                                <div className="text-xs text-muted-foreground truncate">{group.description}</div>
+                                <p className="text-xs text-muted-foreground truncate">{group.description}</p>
                               )}
                             </div>
-                            <ChevronRight className={cn(
-                              "size-4 shrink-0 text-muted-foreground/50 transition-transform",
-                              memberGroup?.id === group.id && "rotate-90 text-primary",
-                            )}
-                            />
-                          </div>
-                        </TableCell>
-                        <TableCell className="text-center">
-                          <Badge variant="secondary">{group.memberCount}</Badge>
-                        </TableCell>
-                        <TableCell>
-                          <div className="flex gap-1" onClick={e => e.stopPropagation()}>
-                            <Dialog
-                              open={editGroup?.id === group.id}
-                              onOpenChange={(open) => {
-                                if (!open)
-                                  setEditGroup(null);
-                              }}
+                            <div
+                              className="flex shrink-0 gap-0.5 opacity-0 transition-opacity group-hover:opacity-100 group-focus-within:opacity-100 data-[active=true]:opacity-100"
+                              data-active={active}
+                              onClick={e => e.stopPropagation()}
                             >
-                              <DialogTrigger
-                                render={(
-                                  <Button variant="ghost" size="sm" onClick={() => setEditGroup(group)}>
-                                    <Pencil className="mr-1 size-3.5" />
-                                    {t("common.edit")}
-                                  </Button>
-                                )}
-                              />
-                              <DialogContent>
-                                <GroupFormDialog
-                                  initialName={group.name}
-                                  initialDescription={group.description ?? ""}
-                                  onSubmit={async (name, description) => {
-                                    await http(`/account/groups/${group.id}`, {
-                                      method: "PATCH",
-                                      body: JSON.stringify({ name, description: description || undefined }),
-                                    });
+                              <Dialog
+                                open={editGroup?.id === group.id}
+                                onOpenChange={(open) => {
+                                  if (!open)
                                     setEditGroup(null);
-                                    void fetchGroups();
-                                  }}
-                                  title={t("editTitle")}
-                                  description={t("editDescription")}
-                                  submitLabel={t("common.save")}
+                                }}
+                              >
+                                <DialogTrigger
+                                  render={(
+                                    <Button
+                                      variant="ghost"
+                                      size="icon-sm"
+                                      aria-label={t("common.edit")}
+                                      onClick={() => setEditGroup(group)}
+                                    >
+                                      <Pencil className="size-3.5" />
+                                    </Button>
+                                  )}
                                 />
-                              </DialogContent>
-                            </Dialog>
-
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              onClick={() => setDeleteConfirm(group)}
-                              className="text-destructive hover:text-destructive"
-                            >
-                              <Trash2 className="mr-1 size-3.5" />
-                              {t("common.delete")}
-                            </Button>
+                                <DialogContent>
+                                  <GroupFormDialog
+                                    initialName={group.name}
+                                    initialDescription={group.description ?? ""}
+                                    onSubmit={async (name, description) => {
+                                      await http(`/account/groups/${group.id}`, {
+                                        method: "PATCH",
+                                        body: JSON.stringify({ name, description: description || undefined }),
+                                      });
+                                      setEditGroup(null);
+                                      void fetchGroups();
+                                    }}
+                                    title={t("editTitle")}
+                                    description={t("editDescription")}
+                                    submitLabel={t("common.save")}
+                                  />
+                                </DialogContent>
+                              </Dialog>
+                              <Button
+                                variant="ghost"
+                                size="icon-sm"
+                                aria-label={t("common.delete")}
+                                className="text-destructive hover:text-destructive"
+                                onClick={() => setDeleteConfirm(group)}
+                              >
+                                <Trash2 className="size-3.5" />
+                              </Button>
+                            </div>
                           </div>
-                        </TableCell>
-                      </TableRow>
-                    ))}
-            </TableBody>
-          </Table>
-        </div>
+                        );
+                      })}
+                    </div>
+                  )}
+          </CardContent>
+        </Card>
 
         {/* Member panel */}
-        {memberGroup && (
-          <div className="rounded-md border">
-            <div className="flex items-center justify-between border-b px-4 py-3">
+        <Card>
+          <CardHeader>
+            <div className="flex items-center justify-between gap-2">
               <div className="min-w-0">
-                <h3 className="font-semibold truncate">{memberGroup.name}</h3>
-                <p className="text-xs text-muted-foreground">{t("membersOf", { name: memberGroup.name })}</p>
+                <CardTitle className="truncate">
+                  {selectedGroup ? t("membersOf", { name: selectedGroup.name }) : t("membersTitle")}
+                </CardTitle>
+                <CardDescription>{t("membersDescription")}</CardDescription>
               </div>
-              <div className="flex items-center gap-2 shrink-0">
+              {selectedGroup && (
                 <Dialog
                   open={addMemberOpen}
                   onOpenChange={(open) => {
@@ -422,65 +416,46 @@ function GroupsTab() {
                     </div>
                   </DialogContent>
                 </Dialog>
-                <Button
-                  variant="ghost"
-                  size="icon-sm"
-                  onClick={() => setMemberGroup(null)}
-                  aria-label="Close"
-                >
-                  <X className="size-4" />
-                </Button>
-              </div>
+              )}
             </div>
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>{t("col.memberName")}</TableHead>
-                  <TableHead>{t("col.memberEmail")}</TableHead>
-                  <TableHead className="w-24">{t("col.actions")}</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody aria-busy={membersLoading}>
-                {membersLoading
-                  ? (
-                      <TableRow>
-                        <TableCell colSpan={3} className="h-16 text-center text-muted-foreground">
-                          {t("common.loading")}
-                        </TableCell>
-                      </TableRow>
-                    )
-                  : members.length === 0
-                    ? (
-                        <TableRow>
-                          <TableCell colSpan={3} className="h-16 text-center text-muted-foreground">
-                            {t("noMembers")}
-                          </TableCell>
-                        </TableRow>
-                      )
-                    : members.map(member => (
-                        <TableRow key={member.id}>
-                          <TableCell>
-                            <div className="font-medium">{member.name}</div>
-                            <div className="text-xs text-muted-foreground">{member.username}</div>
-                          </TableCell>
-                          <TableCell className="text-muted-foreground">{member.email}</TableCell>
-                          <TableCell>
+          </CardHeader>
+          <CardContent>
+            {!selectedGroup
+              ? <p className="text-sm text-muted-foreground">{t("selectGroup")}</p>
+              : membersLoading
+                ? <p className="text-sm text-muted-foreground">{t("common.loading")}</p>
+                : members.length === 0
+                  ? <p className="text-sm text-muted-foreground">{t("noMembers")}</p>
+                  : (
+                      <div className="space-y-1.5">
+                        {members.map(member => (
+                          <div
+                            key={member.id}
+                            className="flex items-center justify-between gap-3 rounded-md border px-3 py-2"
+                          >
+                            <div className="min-w-0">
+                              <p className="text-sm font-medium truncate">{member.name}</p>
+                              <p className="text-xs text-muted-foreground truncate">
+                                {member.username}
+                                {" · "}
+                                {member.email}
+                              </p>
+                            </div>
                             <Button
                               variant="ghost"
                               size="sm"
                               onClick={() => void removeMember(member.id)}
-                              className="text-destructive hover:text-destructive"
+                              className="shrink-0 text-destructive hover:text-destructive"
                             >
                               <Trash2 className="mr-1 size-3.5" />
                               {t("removeMember")}
                             </Button>
-                          </TableCell>
-                        </TableRow>
-                      ))}
-              </TableBody>
-            </Table>
-          </div>
-        )}
+                          </div>
+                        ))}
+                      </div>
+                    )}
+          </CardContent>
+        </Card>
       </div>
     </div>
   );

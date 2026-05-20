@@ -53,8 +53,17 @@ function useSidebarWidth() {
   const setAndPersist = useCallback((next: number) => {
     const v = clampWidth(next);
     setWidth(v);
-    if (typeof window !== "undefined")
-      window.localStorage.setItem(SIDEBAR_WIDTH_KEY, String(v));
+    // `localStorage.setItem` throws in Safari private mode / when storage
+    // is disabled or full — persistence is best-effort, so swallow it and
+    // keep the in-memory width.
+    if (typeof window !== "undefined") {
+      try {
+        window.localStorage.setItem(SIDEBAR_WIDTH_KEY, String(v));
+      }
+      catch {
+        // no-op: width still applied for this session.
+      }
+    }
   }, []);
   return [width, setAndPersist] as const;
 }

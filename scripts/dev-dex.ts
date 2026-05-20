@@ -131,18 +131,39 @@ staticPasswords:
 const DEX_CONFIG_TEMPLATE = `${DEX_CONFIG}.template`;
 writeFileSync(DEX_CONFIG_TEMPLATE, dexConfigTemplate);
 
-// Inline sh wrapper: substitute `__PORT__` → `$PORT` (set by nsl) into the
-// final dex config, then exec dex. `exec` keeps dex as the direct child of
-// nsl so signals (and lifetime) propagate without an extra layer.
-const launchScript = `sed "s/__PORT__/$PORT/g" ${DEX_CONFIG_TEMPLATE} > ${DEX_CONFIG} && exec ${DEX_BIN} serve ${DEX_CONFIG}`;
+// Launch wrapper: `__PORT__` is only known once nsl picks a port and injects
+// `$PORT` into the spawned child, so the substitution must happen at launch
+// time, not here. Instead of a `sed | exec` shell pipeline that splices repo
+// paths into a `sh -c` string (injection-shaped — paths could contain shell
+// metacharacters), run a small Bun child via an argv array: it reads the
+// template, does the `__PORT__` → $PORT replace in TS, writes the config,
+// then `exec`s dex via execvp so dex stays the direct child of nsl and
+// signals / lifetime still propagate without an extra layer. All paths are
+// passed via env, never interpolated into a shell string.
+const launchProgram = `
+const { readFileSync, writeFileSync } = require("node:fs");
+const { spawn } = require("node:child_process");
+const tpl = readFileSync(process.env.DEX_CONFIG_TEMPLATE, "utf-8");
+const port = process.env.PORT ?? "";
+writeFileSync(process.env.DEX_CONFIG, tpl.replaceAll("__PORT__", port));
+const child = spawn(process.env.DEX_BIN, ["serve", process.env.DEX_CONFIG], { stdio: "inherit" });
+for (const sig of ["SIGINT", "SIGTERM"]) process.on(sig, () => child.kill(sig));
+child.on("exit", (code, signal) => process.exit(signal ? 1 : (code ?? 0)));
+`;
 
 console.log(`[dev-dex] starting dex on ${DEX_ISSUER}`);
 const dex: Subprocess = Bun.spawn(
-  ["nsl", "run", "--name", `dex-${APP_NAME}`, "--force", "sh", "-c", launchScript],
+  ["nsl", "run", "--name", `dex-${APP_NAME}`, "--force", "bun", "-e", launchProgram],
   {
     cwd: ROOT,
     stdout: "inherit",
     stderr: "inherit",
+    env: {
+      ...process.env,
+      DEX_CONFIG_TEMPLATE,
+      DEX_CONFIG,
+      DEX_BIN,
+    },
   },
 );
 

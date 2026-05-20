@@ -53,7 +53,7 @@ export function DocumentsSidebar({
   // the edit form.
   const handleCreateChild = (parentId: string) => {
     createMutation.mutate(
-      { title: t("untitledPlaceholder", { defaultValue: "Untitled" }), content: "", parentId },
+      { title: t("untitledPlaceholder"), content: "", parentId },
       {
         onSuccess: (doc) => {
           setExpanded((prev) => {
@@ -205,8 +205,33 @@ function TreeRow({
   const isFolder = depth === 0 && hasChildren;
   const indent = 8 + depth * 14;
 
+  // WCAG 2.1.1 — folders must be reachable and operable from the
+  // keyboard. ArrowRight expands (or steps into) a collapsed folder;
+  // ArrowLeft collapses an expanded one. The chevron is also a real
+  // focusable button (no `tabIndex={-1}`) so Tab + Enter/Space work too.
+  const handleRowKeyDown = (e: React.KeyboardEvent) => {
+    if (!hasChildren)
+      return;
+    if (e.key === "ArrowRight" && !isExpanded) {
+      e.preventDefault();
+      e.stopPropagation();
+      onToggle(node.id);
+    }
+    else if (e.key === "ArrowLeft" && isExpanded) {
+      e.preventDefault();
+      e.stopPropagation();
+      onToggle(node.id);
+    }
+  };
+
   return (
-    <li role="treeitem" aria-expanded={hasChildren ? isExpanded : undefined} aria-selected={isSelected} aria-level={depth + 1}>
+    <li
+      role="treeitem"
+      aria-expanded={hasChildren ? isExpanded : undefined}
+      aria-selected={isSelected}
+      aria-level={depth + 1}
+      onKeyDown={handleRowKeyDown}
+    >
       <div
         className={cn(
           "group mx-1 flex items-center gap-1 rounded-md pr-1 text-xs transition-colors",
@@ -220,8 +245,7 @@ function TreeRow({
                 type="button"
                 onClick={() => onToggle(node.id)}
                 className="inline-flex size-4 shrink-0 items-center justify-center text-muted-foreground hover:text-foreground"
-                aria-label={isExpanded ? "Collapse" : "Expand"}
-                tabIndex={-1}
+                aria-label={isExpanded ? t("tree.collapse") : t("tree.expand")}
               >
                 {isExpanded
                   ? <ChevronDown className="size-3.5" />
@@ -250,7 +274,7 @@ function TreeRow({
             onCreateChild(node.id);
           }}
           disabled={createPending}
-          title={t("tree.newChild", { defaultValue: "新建子文档" })}
+          title={t("tree.newChild")}
           className="hidden size-5 shrink-0 items-center justify-center rounded text-muted-foreground/70 hover:bg-foreground/10 hover:text-foreground group-hover:inline-flex disabled:opacity-60"
         >
           <Plus className="size-3" strokeWidth={2.25} />

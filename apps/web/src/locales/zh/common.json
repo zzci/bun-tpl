@@ -20,6 +20,7 @@
     "loading": "加载中...",
     "retry": "重试",
     "submitting": "提交中...",
+    "saving": "保存中...",
     "stillLoading": "仍在加载...",
     "errorDetails": "错误详情",
     "networkError": {

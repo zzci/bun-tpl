@@ -1,9 +1,42 @@
 import type { AppDatabase } from "@/db";
-import { and, eq, inArray, isNull } from "drizzle-orm";
+import { and, eq, inArray, isNotNull, isNull } from "drizzle-orm";
 import { relationTuples } from "@/modules/policy/schema";
 import { getParentRelations, getTupleToUsersetRules } from "./namespace-config";
 
 const MAX_DEPTH = 10;
+
+/**
+ * Hard cap on the total number of graph nodes a single top-level resolution
+ * (`check` / `listUserResources`) may visit, summed across *all* recursion
+ * branches. `MAX_DEPTH` only bounds a single path; a wide permission graph can
+ * still fan out into an exponential number of paths within that depth. This
+ * shared counter bounds the aggregate work and short-circuits a pathological
+ * (or maliciously crafted) graph instead of letting it run unbounded.
+ *
+ * 5000 is far above what any legitimate graph reaches (real resolutions touch
+ * a handful to low-hundreds of nodes) while still capping DoS-shaped inputs.
+ */
+const MAX_NODE_BUDGET = 5000;
+
+/**
+ * Mutable budget threaded through every recursion branch of a single
+ * resolution. `spend()` returns false once the cap is hit so callers can
+ * short-circuit that branch (treated as "not allowed" — fail closed).
+ */
+interface NodeBudget {
+  remaining: number;
+}
+
+function makeBudget(): NodeBudget {
+  return { remaining: MAX_NODE_BUDGET };
+}
+
+function spend(budget: NodeBudget): boolean {
+  if (budget.remaining <= 0)
+    return false;
+  budget.remaining -= 1;
+  return true;
+}
 
 export interface CheckResult {
   readonly allowed: boolean;
@@ -39,8 +72,15 @@ export async function check(
   subjectId: string,
   depth = 0,
   visited: Set<string> = new Set(),
+  budget: NodeBudget = makeBudget(),
 ): Promise<CheckResult> {
   if (depth > MAX_DEPTH) {
+    return { allowed: false, resolvedThrough: [] };
+  }
+
+  // Shared global node budget across all recursion branches — bounds
+  // pathological permission-graph fan-out. Fail closed when exhausted.
+  if (!spend(budget)) {
     return { allowed: false, resolvedThrough: [] };
   }
 
@@ -73,8 +113,10 @@ export async function check(
     };
   }
 
-  // 2. Userset indirect match — find tuples with subject_relation set
-  const usersetTuples = (await db
+  // 2. Userset indirect match — find tuples with subject_relation set.
+  // The `subject_relation IS NOT NULL` predicate is pushed into SQL rather
+  // than JS-filtering the full result set.
+  const usersetTuples = await db
     .select()
     .from(relationTuples)
     .where(
@@ -82,10 +124,10 @@ export async function check(
         eq(relationTuples.namespace, namespace),
         eq(relationTuples.objectId, objectId),
         eq(relationTuples.relation, relation),
+        isNotNull(relationTuples.subjectRelation),
       ),
     )
-    .all())
-    .filter(t => t.subjectRelation !== null);
+    .all();
 
   for (const tuple of usersetTuples) {
     const innerResult = await check(
@@ -97,6 +139,7 @@ export async function check(
       subjectId,
       depth + 1,
       visited,
+      budget,
     );
     if (innerResult.allowed) {
       return {
@@ -112,7 +155,7 @@ export async function check(
   // 3. Computed userset — check parent relations
   const parentRelations = getParentRelations(namespace, relation);
   for (const parentRel of parentRelations) {
-    const parentResult = await check(db, namespace, objectId, parentRel, subjectNs, subjectId, depth + 1, visited);
+    const parentResult = await check(db, namespace, objectId, parentRel, subjectNs, subjectId, depth + 1, visited, budget);
     if (parentResult.allowed) {
       return {
         allowed: true,
@@ -146,6 +189,7 @@ export async function check(
         subjectId,
         depth + 1,
         visited,
+        budget,
       );
       if (innerResult.allowed) {
         return {
@@ -251,7 +295,13 @@ export async function listUserResources(
   userId: string,
   namespace: string,
   relation: string,
+  budget: NodeBudget = makeBudget(),
 ): Promise<readonly string[]> {
+  // Shared global budget across the resource_group recursion below. Fail
+  // closed (return what we have) once exhausted.
+  if (!spend(budget))
+    return [];
+
   const objectIds = new Set<string>();
   const effectiveRelations = collectEffectiveRelations(namespace, relation);
 
@@ -275,7 +325,7 @@ export async function listUserResources(
   }
 
   // 2. Through groups — recursively resolve all group memberships
-  const allGroupIds = await resolveUserGroups(db, userId);
+  const allGroupIds = await resolveUserGroups(db, userId, budget);
 
   for (const groupId of allGroupIds) {
     const groupResourceTuples = await db
@@ -301,7 +351,7 @@ export async function listUserResources(
   for (const rel of effectiveRelations) {
     const ttuRules = getTupleToUsersetRules(namespace, rel);
     for (const rule of ttuRules) {
-      const rgIds = await listUserResources(db, userId, "resource_group", rule.computed_userset);
+      const rgIds = await listUserResources(db, userId, "resource_group", rule.computed_userset, budget);
 
       for (const rgId of rgIds) {
         const memberTuples = await db
@@ -330,7 +380,7 @@ export async function listUserResources(
 /**
  * Recursively resolve all groups a user belongs to (handles nested groups).
  */
-async function resolveUserGroups(db: AppDatabase, userId: string): Promise<readonly string[]> {
+async function resolveUserGroups(db: AppDatabase, userId: string, budget: NodeBudget): Promise<readonly string[]> {
   const allGroups = new Set<string>();
 
   // Direct group memberships
@@ -356,6 +406,8 @@ async function resolveUserGroups(db: AppDatabase, userId: string): Promise<reado
 
   // Resolve nested: groups that include other groups as members
   while (queue.length > 0) {
+    if (!spend(budget))
+      break;
     const groupId = queue.shift()!;
     const parentGroups = await db
       .select()

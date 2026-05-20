@@ -75,6 +75,9 @@ describe("Zanzibar Engine", () => {
     const dir = resolve(dbPath, "..");
     if (existsSync(dir))
       rmSync(dir, { recursive: true, force: true });
+    // Restore the module-global namespace registry (clear+replace
+    // singleton) so test-only namespaces don't leak into other files.
+    loadNamespaces();
   });
 
   describe("check", () => {

@@ -76,6 +76,32 @@ else {
   commit = gitResult.stdout.toString().trim() || "unknown";
 }
 
+// `BUILD_TIME` must be deterministic so the binary (and its SHA-256) is
+// reproducible across builds of the same source. Mirrors the BUILD_COMMIT
+// fallback chain: explicit env override (`BUILD_TIME`, or `SOURCE_DATE_EPOCH`
+// per the reproducible-builds spec) → the git commit timestamp → wall clock
+// only as a last resort when neither is available.
+function resolveBuildTime(): string {
+  const envBuildTime = (process.env.BUILD_TIME ?? "").trim();
+  if (envBuildTime)
+    return envBuildTime;
+
+  const epoch = (process.env.SOURCE_DATE_EPOCH ?? "").trim();
+  if (epoch && /^\d+$/.test(epoch)) {
+    const seconds = Number.parseInt(epoch, 10);
+    if (Number.isFinite(seconds))
+      return new Date(seconds * 1000).toISOString();
+  }
+
+  const gitTime = Bun.spawnSync(["git", "show", "-s", "--format=%cI", "HEAD"], { cwd: ROOT });
+  const commitIso = gitTime.stdout.toString().trim();
+  if (commitIso)
+    return new Date(commitIso).toISOString();
+
+  return new Date().toISOString();
+}
+const buildTime = resolveBuildTime();
+
 // ---------- 0. Recover from interrupted previous run ----------
 for (const tmp of [`${STATIC_FILE}.tmp`, `${MIGRATIONS_FILE}.tmp`]) {
   if (existsSync(tmp))
@@ -203,10 +229,8 @@ ${migrationEntries.join("\n")}
   console.log(`[compile] Compiling binary...${target ? ` (target: ${target})` : ""}`);
   console.log(`[compile] Commit: ${commit}`);
 
-  const buildTime = new Date().toISOString();
-  const pkgVersion = await Bun.file(resolve(ROOT, "apps/api/package.json")).json()
-    .then((p: { version?: string }) => p.version ?? "0.0.0")
-    .catch(() => "0.0.0");
+  console.log(`[compile] Build time: ${buildTime}`);
+  const pkgVersion = await Bun.file(resolve(ROOT, "apps/api/package.json")).json().then((p: { version?: string }) => p.version ?? "0.0.0").catch(() => "0.0.0");
 
   const compileArgs = [
     "bun",

@@ -3,10 +3,14 @@ import { existsSync, mkdirSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { resolve } from "node:path";
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
-import { eq } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 import { customAlphabet } from "nanoid";
 import { createDb } from "@/db";
 import { users } from "@/modules/account/users/schema";
+import { uploadAndReference } from "@/modules/file/file.service";
+import { fileReferences, files } from "@/modules/file/schema";
+import { __setLocalDriverRootForTests } from "@/modules/file/storage/local";
+import { __resetDriverRegistryForTests, setActiveDriver } from "@/modules/file/storage/registry";
 import {
   createComment,
   deleteComment,
@@ -43,6 +47,11 @@ beforeEach(async () => {
   mkdirSync(dir, { recursive: true });
   dbPath = resolve(dir, "test.db");
   db = await createDb(dbPath);
+  // deleteComment now releases comment attachment references via the file
+  // service, which needs an active storage driver.
+  __resetDriverRegistryForTests();
+  __setLocalDriverRootForTests(resolve(dir, "blobs"));
+  setActiveDriver("local");
 });
 
 afterEach(() => {
@@ -179,5 +188,37 @@ describe("deleteComment", () => {
     const childRow = await db.select().from(itemComments).where(eq(itemComments.id, child.id)).get();
     expect(childRow?.replyToId).toBeNull();
     expect(childRow?.content).toBe("c");
+  });
+
+  test("releases the comment's attachment references synchronously (no reliance on the orphan sweep)", async () => {
+    const { userId, item } = await makeItem();
+    const comment = await createComment(db, { itemId: item.id, authorId: userId, content: "with attachment" });
+
+    const { reference, file } = await uploadAndReference(
+      db,
+      { MAX_UPLOAD_BYTES: 10 * 1024 * 1024, MAX_ATTACHMENTS_PER_RESOURCE: 20, UPLOADS_TOTAL_BYTES: 0 },
+      {
+        file: new File(["blob-bytes"], "note.txt", { type: "text/plain" }),
+        ownerType: "item_comment_attachment",
+        ownerId: comment.id,
+        uploadedBy: userId,
+      },
+    );
+    // Sanity: the reference exists and the blob is referenced once.
+    expect(await db.select().from(fileReferences).where(eq(fileReferences.id, reference.id)).get()).toBeDefined();
+    expect((await db.select().from(files).where(eq(files.id, file.id)).get())?.refCount).toBe(1);
+
+    await deleteComment(db, comment.id);
+
+    // The reference row is gone — without depending on any background sweep.
+    const refsAfter = await db
+      .select()
+      .from(fileReferences)
+      .where(and(eq(fileReferences.ownerType, "item_comment_attachment"), eq(fileReferences.ownerId, comment.id)))
+      .all();
+    expect(refsAfter).toEqual([]);
+    // ref_count decremented to 0 so the existing unreferenced-files GC can
+    // reclaim the blob (async contract — blob row is intentionally left).
+    expect((await db.select().from(files).where(eq(files.id, file.id)).get())?.refCount).toBe(0);
   });
 });

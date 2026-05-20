@@ -34,7 +34,7 @@ export const configSchema = z.object({
   LOG_FILE: z.string().default("data/logs/app.log"),
   // When true, write logs to stdout instead of LOG_FILE — preferred for
   // container deployments that capture stdout/stderr at the runtime level.
-  LOG_TO_STDOUT: z.coerce.boolean().default(false),
+  LOG_TO_STDOUT: z.enum(["true", "false"]).default("false").transform(v => v === "true"),
   CORS_ORIGIN: z.string().optional(),
 
   // When true, honour the rightmost `X-Forwarded-For` entry (and, as a
@@ -43,7 +43,7 @@ export const configSchema = z.object({
   // Only enable behind a sanitising proxy that strips client-supplied
   // forwarding headers. `TRUSTED_PROXY_IPS` further restricts which hop
   // addresses are allowed to set those headers.
-  TRUST_PROXY: z.coerce.boolean().default(false),
+  TRUST_PROXY: z.enum(["true", "false"]).default("false").transform(v => v === "true"),
 
   // Comma-separated CIDR allow-list of proxy peer addresses. Forwarding
   // headers are honoured only when the immediate TCP peer matches one of
@@ -55,7 +55,7 @@ export const configSchema = z.object({
 
   // Opt-in flag for the experimental DEK-rotation flow. When false (default)
   // the rotation endpoints respond with 501 Not Implemented.
-  ENABLE_EXPERIMENTAL_DEK_ROTATION: z.coerce.boolean().default(false),
+  ENABLE_EXPERIMENTAL_DEK_ROTATION: z.enum(["true", "false"]).default("false").transform(v => v === "true"),
 
   // Cron scheduler gate. When false (default) the Baker timer is NOT
   // allocated and the built-in `log-cleanup` default is NOT auto-seeded.
@@ -64,7 +64,7 @@ export const configSchema = z.object({
   // is off — and the SPA reads `schedulerEnabled` from
   // `/api/cron/actions` to render a status banner. See
   // `docs/modules/cron.md` § Enabling for the runtime model.
-  CRON_ENABLED: z.coerce.boolean().default(false),
+  CRON_ENABLED: z.enum(["true", "false"]).default("false").transform(v => v === "true"),
 
   // Opt-in list (comma-separated) of cron actions whose `spec.defaultEnabled`
   // is `false`. Each entry is matched against an action's `spec.name`; any
@@ -89,7 +89,7 @@ export const configSchema = z.object({
   // pivots into cloud metadata endpoints and internal services from a
   // compromised admin session. Enable for legitimate internal pings
   // (e.g. talking to a sidecar on `localhost`).
-  HTTP_ACTION_ALLOW_PRIVATE: z.coerce.boolean().default(false),
+  HTTP_ACTION_ALLOW_PRIVATE: z.enum(["true", "false"]).default("false").transform(v => v === "true"),
 
   // Per-execution timeout for the `http-request` cron action, in seconds.
   // The fetch is aborted via `AbortSignal.timeout()` after this many
@@ -151,7 +151,7 @@ export const configSchema = z.object({
   // downloads 302 to a short-lived signed URL rather than streaming
   // through the API. Per-deployment toggle; setting false forces every
   // download to flow through the API (easier audit / firewall).
-  FILE_PRESIGN_ENABLED: z.coerce.boolean().default(true),
+  FILE_PRESIGN_ENABLED: z.enum(["true", "false"]).default("true").transform(v => v === "true"),
   // TTL for signed URLs in seconds. Short by design: a leaked URL stays
   // valid only briefly; re-issuing requires the consumer permission hook
   // to pass again.
@@ -164,7 +164,7 @@ export const configSchema = z.object({
   // against the SINGLE_USER_USERNAME / SINGLE_USER_PASSWORD_HASH pair set
   // here. Registration and password change are not exposed. Generate the
   // hash with `bun run hash-password`.
-  SINGLE_USER_MODE: z.coerce.boolean().default(false),
+  SINGLE_USER_MODE: z.enum(["true", "false"]).default("false").transform(v => v === "true"),
   SINGLE_USER_USERNAME: z.string().min(1).optional(),
   // Inline hash. Bun dotenv expands `$VAR` (even in single quotes), so the
   // `$` separators in argon2id / bcrypt / pbkdf2 hashes must be escaped.

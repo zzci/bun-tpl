@@ -80,17 +80,27 @@ async function assertMoveTargetAllowed(
   if (targetParentShortId === movingShortId)
     throw new AppError("A document cannot be its own parent", 400, "INVALID_MOVE");
 
+  await assertParentTargetAllowed(c, targetParentShortId);
+
+  const descendants = await listDescendantIds(c.get("db"), movingShortId);
+  if (descendants.includes(targetParentShortId)) {
+    throw new AppError("Cannot move a document under its own descendant", 400, "INVALID_MOVE");
+  }
+}
+
+async function assertParentTargetAllowed(
+  c: Context<AppEnv>,
+  targetParentShortId: string | null | undefined,
+) {
+  if (!targetParentShortId)
+    return;
+
   const target = await resolveDocumentItem(c.get("db"), targetParentShortId);
   if (!target)
     throw new NotFoundError("Document", targetParentShortId);
 
   const ctx = policyContext(c)!;
   await documentAccess.assert(ctx, "document:update", target.id);
-
-  const descendants = await listDescendantIds(c.get("db"), movingShortId);
-  if (descendants.includes(targetParentShortId)) {
-    throw new AppError("Cannot move a document under its own descendant", 400, "INVALID_MOVE");
-  }
 }
 
 export function documentRoutes() {
@@ -150,6 +160,7 @@ export function documentRoutes() {
     const db = c.get("db");
     const body = createSchema.parse(await c.req.json());
     const actor = c.get("user")!;
+    await assertParentTargetAllowed(c, body.parentId);
     const doc = await createDocument(db, { ...body, creatorId: actor.id });
     await audit(db, c.get("logger"), {
       actorId: actor.id,
@@ -170,6 +181,12 @@ export function documentRoutes() {
     const doc = await getDocumentById(db, id);
     if (!doc)
       throw new NotFoundError("Document", id);
+    // Defense in depth: the global policyMiddleware already gates this,
+    // but it falls through when the route-binding registry desyncs or
+    // the id doesn't resolve there. Re-assert in-handler so object-level
+    // authz never depends solely on the registry. Admin short-circuits
+    // via the `bypass` hook inside `can()`.
+    await documentAccess.assert(policyContext(c)!, "document:read", doc.id);
     return c.json({ success: true, data: doc });
   });
 
@@ -360,6 +377,7 @@ export function documentRoutes() {
     const item = await resolveDocumentItem(db, id);
     if (!item)
       throw new NotFoundError("Document", id);
+    await documentAccess.assert(policyContext(c)!, "document:read", item.id);
     const data = await listAttachmentsByOwner(db, "item_attachment", item.id);
     return c.json({ success: true, data });
   });
@@ -371,6 +389,7 @@ export function documentRoutes() {
     const item = await resolveDocumentItem(db, id);
     if (!item)
       throw new NotFoundError("Document", id);
+    await documentAccess.assert(policyContext(c)!, "document:download", item.id);
     const ref = await getReferenceById(db, aid);
     if (!ref || ref.ownerType !== "item_attachment" || ref.ownerId !== item.id)
       throw new NotFoundError("Attachment", aid);
@@ -464,6 +483,14 @@ export function documentRoutes() {
   router.get("/documents/:id/shares", async (c) => {
     const db = c.get("db");
     const id = c.req.param("id")!;
+    // This handler previously had NO in-handler check at all and leaked
+    // the (inherited) sharing graph to any authenticated user if the
+    // policy binding desynced. Resolve + assert document:manage (owner)
+    // explicitly; admin short-circuits via the bypass hook.
+    const item = await resolveDocumentItem(db, id);
+    if (!item)
+      throw new NotFoundError("Document", id);
+    await documentAccess.assert(policyContext(c)!, "document:manage", item.id);
     const data = await listDocumentSharesWithInheritance(db, id);
     return c.json({ success: true, data });
   });

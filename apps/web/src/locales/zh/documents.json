@@ -11,6 +11,8 @@
   "deleteTitle": "删除文档",
   "deleteConfirm": "确定要删除文档「{{title}}」吗？此操作无法撤销。",
   "searchPlaceholder": "按标题或内容搜索...",
+  "untitledPlaceholder": "无标题",
+  "shareComingSoon": "分享功能即将推出。",
   "tagsPlaceholder": "添加标签...",
   "totalCount": "{{count}} 个文档",
   "noResults": "未找到文档。",
@@ -23,13 +25,16 @@
   },
   "field": {
     "title": "标题",
-    "contentPlaceholder": "开始编写您的文档..."
+    "contentPlaceholder": "开始编写您的文档...",
+    "titleRequired": "标题不能为空",
+    "noContent": "暂无内容。"
   },
   "comments": {
     "title": "评论",
     "placeholder": "输入评论...",
     "send": "发送",
     "noComments": "暂无评论。",
+    "showOlder": "显示 {{count}} 条更早的评论",
     "deleteTitle": "删除评论",
     "deleteConfirm": "确定要删除此评论吗？",
     "lock": "锁定评论",
@@ -66,6 +71,12 @@
   "inheritedFrom": "继承自「{{title}}」",
   "inheritedNotRemovable": "继承的分享只能在来源文档中移除",
   "tree": {
-    "newChild": "新建子文档"
+    "newChild": "新建子文档",
+    "expand": "展开",
+    "collapse": "折叠"
+  },
+  "conflict": {
+    "title": "文档已在别处被修改",
+    "body": "此文档已在另一个会话中被更新。您的草稿已保留在此——请复制您的更改，然后重新加载以合并。"
   }
 }

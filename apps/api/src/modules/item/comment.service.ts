@@ -1,8 +1,28 @@
 import type { AppDatabase } from "@/db";
 import { and, asc, eq, isNull } from "drizzle-orm";
+import { releaseAllByOwner } from "@/modules/file";
 import { itemComments, items } from "@/modules/item/schema";
 import { NotFoundError, ValidationError } from "@/shared/lib/errors";
 import { nanoid } from "@/shared/lib/id";
+
+/**
+ * `owner_type` discriminator the file module uses for comment attachments.
+ * Mirrors the value in `orphan-sweep.ts`'s `ORPHAN_RULES`; keeping the two
+ * in lockstep is what makes the synchronous release in {@link deleteComment}
+ * idempotent with the out-of-band orphan sweep.
+ */
+const COMMENT_ATTACHMENT_OWNER_TYPE = "item_comment_attachment";
+
+/**
+ * Drop a comment's attachment references on the **async** GC contract: the
+ * `file_references` rows go away and `files.ref_count` is decremented in
+ * `releaseReference`'s own transaction; blob reclamation is deferred to the
+ * existing unreferenced-files GC. We deliberately do not request the `sync`
+ * contract here — driving `driver.delete` + the `files` row delete from the
+ * comment-delete path is exactly the cascade the libsql encrypted-WAL quirk
+ * (documented on {@link deleteComment}) penalises.
+ */
+const RELEASE_CONFIG = { FILE_GC_MODE: "async", FILE_PRESIGN_ENABLED: false, FILE_PRESIGN_TTL_SECONDS: 0 } as const;
 
 export type ItemCommentRow = typeof itemComments.$inferSelect;
 
@@ -128,16 +148,33 @@ export async function createComment(
  * leaves any replies addressable but with `reply_to_id = NULL`; the UI
  * surfaces them as "replying to a removed comment".
  *
- * Cascading attachment release is intentionally **not** performed here.
- * Calling `releaseAllByOwner('item_comment_attachment', commentId)`
- * from this path reproducibly trips a libsql encrypted-WAL recovery
- * quirk that surfaces as `SQLITE_CORRUPT` on the next cold open.
- * Until the upstream behaviour is fixed, the SPA is expected to detach
- * a comment's attachments first (the sub-type routes expose
- * `DELETE /comments/:cid/attachments/:aid`); anything left behind
- * becomes orphan `file_references` rows that the `runOrphanSweep` pass
- * reclaims out-of-band.
+ * Attachment references are released **synchronously** here. The original
+ * design relied solely on the out-of-band `runOrphanSweep` pass to reclaim
+ * the leftover `file_references` rows, but that sweep does not run when the
+ * file GC is disabled (`FILE_GC_INTERVAL_SECONDS=0`) or set to `sync` mode
+ * — so refs (and, via `ref_count`, blobs) leaked permanently and storage
+ * correctness silently depended on an optional background job.
+ *
+ * We now always release the comment's references on delete, reusing the
+ * exact path the sweep uses (`releaseAllByOwner` → `releaseReference`,
+ * `owner_type = 'item_comment_attachment'`). This is idempotent with the
+ * sweep: a later sweep pass simply finds no orphan rows for this comment.
+ *
+ * The libsql encrypted-WAL recovery quirk that previously blocked an
+ * in-line release was specific to driving the **blob delete** (`sync` GC:
+ * `driver.delete` + `files` row delete) from this transaction. We sidestep
+ * it by releasing on the **async** GC contract (see {@link RELEASE_CONFIG}):
+ * only the `file_references` rows and `files.ref_count` change here, each
+ * in `releaseReference`'s own transaction — never inside the
+ * `itemComments` delete — and blob reclamation stays with the existing
+ * unreferenced-files GC. The signature is unchanged because the release
+ * contract is fixed, not caller-supplied.
+ *
+ * References are released before the row delete so a crash between the two
+ * steps degrades to the original behaviour (leftover orphans the sweep can
+ * still reclaim) rather than losing the ability to find them.
  */
 export async function deleteComment(db: AppDatabase, commentId: string): Promise<void> {
+  await releaseAllByOwner(db, RELEASE_CONFIG, COMMENT_ATTACHMENT_OWNER_TYPE, commentId);
   await db.delete(itemComments).where(eq(itemComments.id, commentId)).run();
 }

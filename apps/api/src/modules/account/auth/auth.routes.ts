@@ -34,26 +34,51 @@ import { verifyPassword } from "./password";
 const RE_CONTROL_CHARS = /[\x00-\x1F\x7F]/g;
 
 /**
+ * Thrown when the IdP returned an id_token that is present but cannot be
+ * parsed into a usable `sub` (malformed JWT, non-string/absent `sub`
+ * claim). This is an auth failure — NOT the same as a token-less pure
+ * OAuth2 response. Treating an unparseable id_token as "no id_token"
+ * would silently downgrade to `skipSubjectCheck`, dropping the sub
+ * binding the IdP intended us to enforce.
+ */
+class IdTokenError extends Error {}
+
+/**
  * Decode `sub` from the id_token JWT payload without verifying the
  * signature. We pass it to openid-client's `fetchUserInfo` as
  * `expectedSub` — the library performs the actual sub-match check
- * against the userinfo response. For non-JWT id_tokens or token-less
- * responses, return null so the caller skips the assertion.
+ * against the userinfo response.
+ *
+ * Three outcomes, deliberately distinct:
+ *   - id_token genuinely absent (pure OAuth2 provider) → return `null`;
+ *     the caller may skip the sub assertion.
+ *   - id_token present and yields a string `sub` → return it.
+ *   - id_token present but unparseable / missing a string `sub` → throw
+ *     `IdTokenError`. The IdP committed to OIDC by sending a token; a
+ *     broken one is an auth failure, not a reason to skip the binding.
  */
 function readIdTokenSub(idToken: string | undefined): string | null {
   if (!idToken)
     return null;
   const parts = idToken.split(".");
   if (parts.length !== 3 || !parts[1])
-    return null;
+    throw new IdTokenError("id_token present but not a well-formed JWT");
+  let payload: { sub?: unknown };
   try {
-    const payload = JSON.parse(Buffer.from(parts[1], "base64url").toString("utf-8")) as { sub?: unknown };
-    return typeof payload.sub === "string" ? payload.sub : null;
+    payload = JSON.parse(Buffer.from(parts[1], "base64url").toString("utf-8")) as { sub?: unknown };
   }
   catch {
-    return null;
+    throw new IdTokenError("id_token payload is not valid JSON");
   }
+  if (typeof payload.sub !== "string" || payload.sub === "")
+    throw new IdTokenError("id_token payload has no usable string `sub` claim");
+  return payload.sub;
 }
+
+// Test-only surface for the three-way id_token distinction (absent vs
+// valid vs present-but-unparseable). Not used by runtime callers.
+export const __readIdTokenSubForTests = readIdTokenSub;
+export const __IdTokenErrorForTests = IdTokenError;
 // In production we use `__Secure-` (not `__Host-`) for auxiliary cookies so
 // multiple instances on one origin under different `BASE_PATH`s don't clobber
 // each other's cookies via the forced `Path=/`. Dev uses the plain name
@@ -357,13 +382,22 @@ export function authRoutes() {
       }, "OAuth token exchange failed");
       return c.redirect(buildLoginErrorUrl(base, "oidc_error", "Token exchange failed"), 302);
     }
+    // Resolve the expected `sub` BEFORE the userinfo call so a present-
+    // but-unparseable id_token fails closed as an auth error instead of
+    // silently downgrading to `skipSubjectCheck`. A genuinely absent
+    // id_token (pure OAuth2 IdP) yields `null` → skip is acceptable.
+    let idTokenSub: string | null;
+    try {
+      idTokenSub = readIdTokenSub(tokens.id_token);
+    }
+    catch (err) {
+      logger.error({ err: err instanceof Error ? err.message : String(err) }, "OAuth id_token rejected");
+      return c.redirect(buildLoginErrorUrl(base, "oidc_error", "Invalid id_token"), 302);
+    }
     let userInfo;
     try {
-      // We don't have the sub yet — openid-client wants `expectedSub` to
-      // match the id_token. Pass an empty string as sentinel; if the IdP
-      // returns an id_token, openid-client validates internally; the
-      // userinfo response carries the sub for us to read.
-      const idTokenSub = readIdTokenSub(tokens.id_token);
+      // expectedSub === "" tells fetchUserInfo to skipSubjectCheck — only
+      // reached when the IdP sent no id_token at all (pure OAuth2).
       userInfo = await fetchUserInfo({
         oauth,
         appConfig: config,

@@ -29,13 +29,60 @@ const MAX_BODY_PREVIEW_BYTES = 2048;
 
 // IPv4 literal regex; captured groups are the four octets.
 const RE_IPV4 = /^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/;
+const RE_IPV6_BRACKETS = /^\[(.*)\]$/;
+const RE_IPV4_MAPPED_HEX = /^(?:::ffff:|0:0:0:0:0:ffff:)([0-9a-f]{1,4}):([0-9a-f]{1,4})$/;
 
 function isIpLiteral(host: string): boolean {
-  if (RE_IPV4.test(host))
+  const bare = stripIpv6Brackets(host.toLowerCase());
+  if (RE_IPV4.test(bare))
     return true;
   // IPv6 literals always contain `:` (and `new URL().hostname` strips
   // the surrounding brackets).
-  return host.includes(":");
+  return bare.includes(":");
+}
+
+function stripIpv6Brackets(host: string): string {
+  return host.match(RE_IPV6_BRACKETS)?.[1] ?? host;
+}
+
+function isPrivateIpv4(host: string): boolean {
+  const m = host.match(RE_IPV4);
+  if (!m)
+    return false;
+  const a = Number(m[1]);
+  const b = Number(m[2]);
+  if ([a, b, Number(m[3]), Number(m[4])].some(n => !Number.isFinite(n) || n < 0 || n > 255))
+    return false;
+  if (a === 0)
+    return true; // 0.0.0.0/8 — routes to loopback on Linux
+  if (a === 10)
+    return true;
+  if (a === 100 && b >= 64 && b <= 127)
+    return true; // 100.64.0.0/10 — RFC 6598 CGNAT
+  if (a === 127)
+    return true;
+  if (a === 169 && b === 254)
+    return true;
+  if (a === 172 && b >= 16 && b <= 31)
+    return true;
+  if (a === 192 && b === 168)
+    return true;
+  return false;
+}
+
+function ipv4MappedToDotted(host: string): string | null {
+  const dotted = host.startsWith("::ffff:") ? host.slice("::ffff:".length) : "";
+  if (RE_IPV4.test(dotted))
+    return dotted;
+
+  const m = host.match(RE_IPV4_MAPPED_HEX);
+  if (!m)
+    return null;
+  const hi = Number.parseInt(m[1]!, 16);
+  const lo = Number.parseInt(m[2]!, 16);
+  if (!Number.isFinite(hi) || !Number.isFinite(lo) || hi < 0 || hi > 0xFFFF || lo < 0 || lo > 0xFFFF)
+    return null;
+  return `${hi >> 8}.${hi & 0xFF}.${lo >> 8}.${lo & 0xFF}`;
 }
 
 /**
@@ -49,34 +96,24 @@ function isIpLiteral(host: string): boolean {
  * defence belongs in the network layer, not the application layer.
  */
 export function isPrivateDestination(hostname: string): boolean {
-  const host = hostname.toLowerCase();
+  const host = stripIpv6Brackets(hostname.toLowerCase());
   if (host === "localhost" || host === "::1" || host === "::" || host === "0.0.0.0")
     return true;
-  const m = host.match(RE_IPV4);
-  if (m) {
-    const a = Number(m[1]);
-    const b = Number(m[2]);
-    if ([a, b, Number(m[3]), Number(m[4])].some(n => !Number.isFinite(n) || n < 0 || n > 255))
-      return false;
-    if (a === 10)
-      return true;
-    if (a === 127)
-      return true;
-    if (a === 169 && b === 254)
-      return true;
-    if (a === 172 && b >= 16 && b <= 31)
-      return true;
-    if (a === 192 && b === 168)
-      return true;
-    return false;
-  }
+  if (RE_IPV4.test(host))
+    return isPrivateIpv4(host);
+
   // IPv6 literals are enclosed in brackets in URLs, but `new URL().hostname`
   // strips them; the result still contains `:`. Reject the unique-local /
   // link-local prefixes by string match.
   if (host.includes(":")) {
-    if (host.startsWith("fc") || host.startsWith("fd"))
+    const mapped = ipv4MappedToDotted(host);
+    if (mapped)
+      return isPrivateIpv4(mapped);
+
+    const firstGroup = Number.parseInt(host.split(":")[0] || "0", 16);
+    if ((firstGroup & 0xFE00) === 0xFC00)
       return true;
-    if (host.startsWith("fe80:"))
+    if ((firstGroup & 0xFFC0) === 0xFE80)
       return true;
   }
   return false;
@@ -113,17 +150,22 @@ export const execute: ActionExecutor = async (ctx, config) => {
   if (parsedUrl.protocol !== "http:" && parsedUrl.protocol !== "https:") {
     throw new Error(`unsupported protocol: ${parsedUrl.protocol}`);
   }
+  // The hostname `fetch` actually connects to. When we resolve+validate
+  // a DNS name ourselves we PIN this to the vetted IP so `fetch` cannot
+  // re-resolve to a rebound (private) address between our check and the
+  // socket connect — closing the TOCTOU window. For IP literals and the
+  // allow-private path it stays the original host.
+  let connectHost = parsedUrl.hostname;
   if (!ctx.config.HTTP_ACTION_ALLOW_PRIVATE) {
     if (isPrivateDestination(parsedUrl.hostname))
       throw new Error(`refused private destination ${parsedUrl.hostname} (set HTTP_ACTION_ALLOW_PRIVATE=true to allow)`);
-    // Defence-in-depth against the obvious DNS-rebinding path: resolve
-    // the hostname ourselves and refuse if any resolved address falls
-    // inside a private range. A determined attacker who controls a
-    // sub-second TTL can still race `fetch`'s own resolve; the audit
-    // documents this and recommends a network-layer egress filter for
-    // production. The DNS lookup also catches IPv6 link-local /
-    // unique-local destinations that the hostname-literal check above
-    // cannot.
+    // Resolve the hostname ONCE, validate every returned address, then
+    // connect to the validated IP directly (see `connectHost` use
+    // below). `fetch` is given the IP, not the name, so it performs no
+    // second resolution — a rebind to a private address after this
+    // check can no longer take effect. The DNS lookup also catches IPv6
+    // link-local / unique-local destinations the hostname-literal check
+    // above cannot.
     if (!isIpLiteral(parsedUrl.hostname)) {
       let addrs: readonly { address: string; family: number }[];
       try {
@@ -137,6 +179,11 @@ export const execute: ActionExecutor = async (ctx, config) => {
         if (isPrivateDestination(a.address))
           throw new Error(`refused destination ${parsedUrl.hostname} (resolves to private ${a.address}; set HTTP_ACTION_ALLOW_PRIVATE=true to allow)`);
       }
+      const pinned = addrs[0];
+      if (!pinned)
+        throw new Error(`DNS lookup for ${parsedUrl.hostname} returned no addresses`);
+      // IPv6 literals must be bracketed in a URL authority.
+      connectHost = pinned.family === 6 ? `[${pinned.address}]` : pinned.address;
     }
   }
 
@@ -149,9 +196,32 @@ export const execute: ActionExecutor = async (ctx, config) => {
     init.headers = cfg.headers;
   if (method !== "GET" && method !== "HEAD" && cfg.body !== undefined)
     init.body = cfg.body;
+
+  // Build the request target. When the host was pinned to a resolved IP
+  // we rewrite the URL authority to that IP and:
+  //   - set `Host` to the original hostname so virtual-host routing and
+  //     the IdP's expectations still work, and
+  //   - for HTTPS, set `tls.serverName` so SNI + certificate validation
+  //     still run against the original hostname (the cert is NOT
+  //     validated against the bare IP).
+  let requestUrl = cfg.url;
+  if (connectHost !== parsedUrl.hostname) {
+    const pinnedUrl = new URL(cfg.url);
+    pinnedUrl.hostname = connectHost;
+    requestUrl = pinnedUrl.toString();
+    const headers = new Headers(init.headers);
+    headers.set("Host", parsedUrl.host);
+    init.headers = headers;
+    if (parsedUrl.protocol === "https:") {
+      (init as RequestInit & { tls?: { serverName: string } }).tls = {
+        serverName: parsedUrl.hostname,
+      };
+    }
+  }
+
   let res: Response;
   try {
-    res = await fetch(cfg.url, init);
+    res = await fetch(requestUrl, init);
   }
   catch (err) {
     const msg = err instanceof Error ? err.message : String(err);

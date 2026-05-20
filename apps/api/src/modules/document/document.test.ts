@@ -1,16 +1,22 @@
+import type { Config } from "@/config";
 import type { AppDatabase } from "@/db";
 import type { Logger } from "@/shared/lib/logger";
+import type { AppEnv } from "@/shared/lib/types";
 import { existsSync, mkdirSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { resolve } from "node:path";
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { eq } from "drizzle-orm";
+import { Hono } from "hono";
 import { customAlphabet } from "nanoid";
 import { createDb } from "@/db";
+import { createSession } from "@/modules/account/auth/auth.service";
 import { users } from "@/modules/account/users/schema";
 import { items } from "@/modules/item/schema";
 import { loadNamespaces } from "@/modules/policy/namespace-config";
+import { errorHandler } from "@/shared/middleware/error-handler";
 import { documentAccess } from "./document.permission";
+import { documentRoutes } from "./document.routes";
 import {
   addDocumentShare,
   createDocument,
@@ -24,6 +30,7 @@ import {
   softDeleteDocument,
   updateDocument,
 } from "./document.service";
+import "@/modules/account";
 
 const nanoid = customAlphabet("0123456789abcdefghijklmnopqrstuvwxyz", 8);
 
@@ -55,6 +62,80 @@ const noopLogger = {
   fatal: () => {},
   flush: () => {},
 } as unknown as Logger;
+
+function baseConfig(): Config {
+  return {
+    NODE_ENV: "test",
+    PORT: 3000,
+    HOST: "127.0.0.1",
+    DB_PATH: "data/db/app.db",
+    DB_ENCRYPTION: false,
+    APP_NAME: "app",
+    APP_DISPLAY_NAME: "App",
+    BASE_PATH: "",
+    LOG_LEVEL: "info",
+    LOG_FILE: "data/logs/app.log",
+    LOG_TO_STDOUT: false,
+    CORS_ORIGIN: undefined,
+    TRUST_PROXY: false,
+    TRUSTED_PROXY_IPS: "",
+    ENABLE_EXPERIMENTAL_DEK_ROTATION: false,
+    CRON_ENABLED: false,
+    CRON_ACTIONS_ENABLED: [],
+    HTTP_ACTION_ALLOW_PRIVATE: false,
+    HTTP_ACTION_TIMEOUT_SECONDS: 30,
+    SHELL_ACTION_TIMEOUT_SECONDS: 300,
+    OAUTH_CLIENT_ID: undefined,
+    OAUTH_CLIENT_SECRET: undefined,
+    OAUTH_ISSUER: undefined,
+    OAUTH_AUTHORIZE_URL: undefined,
+    OAUTH_TOKEN_URL: undefined,
+    OAUTH_USERINFO_URL: undefined,
+    OAUTH_PKCE: true,
+    SESSION_MAX_AGE: 86400,
+    AUDIT_RETENTION_DAYS: 0,
+    MAX_UPLOAD_BYTES: 10 * 1024 * 1024,
+    MAX_ATTACHMENTS_PER_RESOURCE: 20,
+    UPLOADS_TOTAL_BYTES: 0,
+    FILE_STORAGE_DRIVER: "local",
+    FILE_STORAGE_LOCAL_ROOT: "data/uploads/files",
+    FILE_GC_MODE: "async",
+    FILE_GC_INTERVAL_SECONDS: 3600,
+    FILE_PRESIGN_ENABLED: true,
+    FILE_PRESIGN_TTL_SECONDS: 300,
+    DEFAULT_ADMIN: "",
+    SINGLE_USER_MODE: false,
+    SINGLE_USER_USERNAME: undefined,
+    SINGLE_USER_PASSWORD_HASH: undefined,
+    SINGLE_USER_PASSWORD_HASH_FILE: undefined,
+    SINGLE_USER_NAME: undefined,
+    SINGLE_USER_EMAIL: undefined,
+    APP_URL: undefined,
+    OIDC_LOGOUT_URL: undefined,
+    SERVICE_TOKEN_METRICS: undefined,
+    SERVICE_TOKEN_BACKUP: undefined,
+    BACKUP_EXPORT_MIN_INTERVAL_SECONDS: 0,
+    MASTER_PASSWORD_FILE: undefined,
+  } as unknown as Config;
+}
+
+function buildDocumentApp(): Hono<AppEnv> {
+  const app = new Hono<AppEnv>();
+  app.use("*", async (c, next) => {
+    c.set("db", db);
+    c.set("config", baseConfig());
+    c.set("logger", noopLogger);
+    await next();
+  });
+  app.route("/", documentRoutes());
+  app.onError(errorHandler);
+  return app;
+}
+
+async function sessionCookieFor(userId: string): Promise<string> {
+  const sessionId = await createSession(db, userId, "test-access-token", undefined, 3600);
+  return `session_id=${sessionId}`;
+}
 
 /** Build a policy context for service-level test calls. */
 function policyCtx(actorId: string) {
@@ -94,6 +175,45 @@ describe("createDocument", () => {
     const parent = await createDocument(db, { title: "P", creatorId: userId });
     const child = await createDocument(db, { title: "C", creatorId: userId, parentId: parent.id });
     expect(child.parentId).toBe(parent.id);
+  });
+});
+
+describe("documentRoutes create parent permissions", () => {
+  test("rejects creating a child under a parent the actor cannot update", async () => {
+    const owner = await seedUser("Owner");
+    const actor = await seedUser("Mallory");
+    const parent = await createDocument(db, { title: "Parent", creatorId: owner });
+    const app = buildDocumentApp();
+
+    const res = await app.request("/documents", {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        "cookie": await sessionCookieFor(actor),
+      },
+      body: JSON.stringify({ title: "Injected", parentId: parent.id }),
+    });
+
+    expect(res.status).toBe(403);
+  });
+
+  test("allows creating a child under a parent the actor owns", async () => {
+    const actor = await seedUser("Alice");
+    const parent = await createDocument(db, { title: "Parent", creatorId: actor });
+    const app = buildDocumentApp();
+
+    const res = await app.request("/documents", {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        "cookie": await sessionCookieFor(actor),
+      },
+      body: JSON.stringify({ title: "Child", parentId: parent.id }),
+    });
+
+    expect(res.status).toBe(201);
+    const body = await res.json() as { data: { parentId: string } };
+    expect(body.data.parentId).toBe(parent.id);
   });
 });
 

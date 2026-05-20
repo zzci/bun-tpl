@@ -38,7 +38,7 @@ export function CreateForm({
 
   const handleSave = () => {
     if (!draft.title.trim()) {
-      toast.error(t("field.titleRequired", { defaultValue: "标题不能为空" }));
+      toast.error(t("field.titleRequired"));
       return;
     }
     createMutation.mutate(
@@ -63,7 +63,7 @@ export function CreateForm({
         <input
           value={draft.title}
           onChange={e => setDraft(prev => ({ ...prev, title: e.target.value }))}
-          placeholder={t("untitledPlaceholder", { defaultValue: "Untitled" })}
+          placeholder={t("untitledPlaceholder")}
           className="min-w-0 flex-1 truncate border-0 bg-transparent px-0 text-lg font-semibold tracking-tight outline-none placeholder:text-muted-foreground/40"
           aria-label="Document title"
           autoFocus

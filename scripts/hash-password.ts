@@ -22,6 +22,7 @@
  * (PBKDF2 hashes contain three `$` separators; argon2id hashes contain five.)
  */
 /* eslint-disable no-console */
+import { Buffer } from "node:buffer";
 import process from "node:process";
 import * as readline from "node:readline/promises";
 import { hashPassword } from "../apps/api/src/modules/account/auth/password";

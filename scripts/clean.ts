@@ -8,6 +8,8 @@
  */
 import { existsSync, rmSync } from "node:fs";
 import { resolve } from "node:path";
+import process from "node:process";
+import { consola } from "consola";
 
 const ROOT = resolve(import.meta.dirname, "..");
 const args = new Set(process.argv.slice(2));
@@ -48,7 +50,7 @@ for (const rel of targets) {
   const abs = resolve(ROOT, rel);
   if (existsSync(abs)) {
     rmSync(abs, { recursive: true, force: true });
-    console.log(`  removed ${rel}`);
+    consola.log(`  removed ${rel}`);
     cleaned++;
   }
 }
@@ -58,18 +60,18 @@ if (all) {
     const abs = resolve(ROOT, rel);
     if (existsSync(abs)) {
       rmSync(abs, { recursive: true, force: true });
-      console.log(`  removed ${rel}`);
+      consola.log(`  removed ${rel}`);
       cleaned++;
     }
   }
 }
 
 if (cleaned === 0) {
-  console.log("  nothing to clean");
+  consola.log("  nothing to clean");
 }
 else {
-  console.log(`\n  cleaned ${cleaned} items`);
+  consola.log(`\n  cleaned ${cleaned} items`);
   if (all) {
-    console.log("  run 'bun install' to restore dependencies");
+    consola.log("  run 'bun install' to restore dependencies");
   }
 }

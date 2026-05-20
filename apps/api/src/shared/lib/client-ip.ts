@@ -69,6 +69,18 @@ export function getClientIp(c: Context, config?: ClientIpConfig): string {
   return peerIp ?? "unknown";
 }
 
+/**
+ * True when the runtime is in the spoofable configuration: forwarding
+ * headers are trusted (`TRUST_PROXY=true`) but no proxy-peer allow-list
+ * narrows *which* peers may set them. In this state any client that can
+ * reach the process directly can forge its IP and defeat every IP-keyed
+ * rate limiter. The app should log a startup warning when this is true
+ * (it does not change request behaviour — kept for backward compat).
+ */
+export function isSpoofableProxyConfig(config?: ClientIpConfig): boolean {
+  return Boolean(config?.TRUST_PROXY) && parseProxyAllowList(config?.TRUSTED_PROXY_IPS).length === 0;
+}
+
 function isSentinel(v: string): boolean {
   return RE_BAD_PEER.test(v);
 }

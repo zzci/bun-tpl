@@ -30,6 +30,11 @@ describe("specialized errors", () => {
     const e = new NotFoundError("user", "42");
     expect(e.statusCode).toBe(404);
     expect(e.code).toBe("NOT_FOUND");
+    expect(e.message).toBe("user 42 not found");
+  });
+
+  test("NotFoundError without an id", () => {
+    const e = new NotFoundError("user");
     expect(e.message).toBe("user not found");
   });
 

@@ -77,6 +77,11 @@ describe("Policy Service", () => {
     const dir = resolve(dbPath, "..");
     if (existsSync(dir))
       rmSync(dir, { recursive: true, force: true });
+    // Restore the module-global namespace registry. loadNamespaces() is a
+    // clear+replace singleton; without this, the test-only namespaces leak
+    // into other test files (e.g. policy.routes member tests need the
+    // default `item` namespace) since bun shares the module across files.
+    loadNamespaces();
   });
 
   describe("createTuple", () => {

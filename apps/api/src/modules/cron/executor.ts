@@ -1,7 +1,7 @@
 import type { Config } from "@/config";
 import type { AppDatabase } from "@/db";
 import type { Logger } from "@/shared/lib/logger";
-import { and, desc, eq } from "drizzle-orm";
+import { and, desc, eq, ne } from "drizzle-orm";
 import { cronJobLogs, cronJobs } from "@/modules/cron/schema";
 import { ulid } from "@/shared/lib/id";
 import { getActionExecutor } from "./actions";
@@ -152,11 +152,17 @@ async function maybeAutoPause(
   if (threshold <= 0)
     return;
 
+  // Order by the actual run time, not the ULID. `id` is a ULID so it is
+  // *usually* monotonic with `started_at`, but a clock skew or a backfilled
+  // row would order the streak wrong; `started_at` is the source of truth,
+  // with `id` only as a same-millisecond tiebreaker. Rows still 'running'
+  // (e.g. a ghost row from a crash) are excluded so an unfinished run can't
+  // reset or skew the consecutive-failure streak.
   const recent = await deps.db
     .select({ status: cronJobLogs.status })
     .from(cronJobLogs)
-    .where(eq(cronJobLogs.jobId, jobId))
-    .orderBy(desc(cronJobLogs.id))
+    .where(and(eq(cronJobLogs.jobId, jobId), ne(cronJobLogs.status, "running")))
+    .orderBy(desc(cronJobLogs.startedAt), desc(cronJobLogs.id))
     .limit(threshold)
     .all();
 

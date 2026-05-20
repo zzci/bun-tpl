@@ -56,7 +56,7 @@ export function TagsRow({
           setEditing(false);
         }
       }}
-      placeholder={t("tagsPlaceholder", { defaultValue: "添加标签..." })}
+      placeholder={t("tagsPlaceholder")}
       className="h-6 w-28 rounded-full border-dashed bg-transparent px-2.5 text-[11px] font-medium placeholder:text-muted-foreground/60 focus-visible:bg-accent/40 focus-visible:ring-0"
     />
   );
@@ -71,7 +71,7 @@ export function TagsRow({
         className="inline-flex h-6 items-center gap-1 rounded-full border border-dashed border-border px-2.5 text-[11px] font-medium text-muted-foreground transition-colors hover:border-foreground/40 hover:text-foreground"
       >
         <Plus className="size-3" strokeWidth={2.25} />
-        {t("tagsPlaceholder", { defaultValue: "添加标签..." })}
+        {t("tagsPlaceholder")}
       </button>
     );
   }
@@ -102,7 +102,7 @@ export function TagsRow({
                 type="button"
                 onClick={() => setEditing(true)}
                 className="inline-flex size-6 items-center justify-center rounded-full border border-dashed border-border text-muted-foreground transition-colors hover:border-foreground/40 hover:text-foreground"
-                aria-label={t("tagsPlaceholder", { defaultValue: "添加标签..." })}
+                aria-label={t("tagsPlaceholder")}
               >
                 <Plus className="size-3" strokeWidth={2.25} />
               </button>

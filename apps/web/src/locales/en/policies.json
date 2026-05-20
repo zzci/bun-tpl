@@ -63,6 +63,16 @@
   "editTupleTitle": "Edit Tuple",
   "editTupleDescription": "Change the relation for this tuple.",
   "createResourceGroupTitle": "Create Resource Group",
+  "editResourceGroupTitle": "Edit Resource Group",
+  "editResourceGroupDescription": "Rename this resource group or change its description.",
+  "deleteResourceGroupTitle": "Delete Resource Group",
+  "deleteResourceGroupConfirm": "Delete resource group \"{{name}}\"? This cannot be undone.",
+  "toast": {
+    "resourceGroupCreated": "Resource group \"{{name}}\" created.",
+    "resourceGroupUpdated": "Resource group \"{{name}}\" updated.",
+    "resourceGroupDeleted": "Resource group \"{{name}}\" deleted.",
+    "memberRemoved": "Member removed."
+  },
   "resourceGroupList": "Resource Groups",
   "resourceGroupListDescription": "Manage resource groups and their members.",
   "resourceGroupName": "Group Name",

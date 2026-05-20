@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { useSystemStore } from "./system";
+import { __resetSystemPollingForTests, useSystemStore } from "./system";
 
 function jsonResponse(body: unknown, init: ResponseInit = {}) {
   return new Response(JSON.stringify(body), {
@@ -15,6 +15,9 @@ beforeEach(() => {
   globalThis.fetch = fetchMock;
   // Reset store between tests; zustand keeps a singleton across describes.
   useSystemStore.setState({ status: "loading", dbError: null });
+  // Clear module-level polling latches (pollSuspended is a process-
+  // lifetime latch in prod and would otherwise leak across tests).
+  __resetSystemPollingForTests();
 });
 
 afterEach(() => {
@@ -104,6 +107,27 @@ describe("useSystemStore polling", () => {
       // Drain any microtasks from awaited fetches.
       await vi.advanceTimersByTimeAsync(0);
       expect(fetchMock).toHaveBeenCalledTimes(1);
+    }
+    finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("suspends polling after observing the disabled (encryption-off) state", async () => {
+    vi.useFakeTimers();
+    try {
+      fetchMock.mockResolvedValue(jsonResponse({
+        success: true,
+        data: { initialized: true, locked: false, status: "disabled" },
+      }));
+      const store = useSystemStore.getState();
+      store.startPolling();
+      // Resolve the first poll → status is disabled, polling self-suspends.
+      await vi.advanceTimersByTimeAsync(31_000);
+      const callsAfterFirst = fetchMock.mock.calls.length;
+      // No further polls regardless of how much time passes.
+      await vi.advanceTimersByTimeAsync(120_000);
+      expect(fetchMock.mock.calls.length).toBe(callsAfterFirst);
     }
     finally {
       vi.useRealTimers();

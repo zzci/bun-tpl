@@ -6,10 +6,13 @@ import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { sql } from "drizzle-orm";
 import { createDb } from "@/db";
 import { accountBackupContribution } from "@/modules/account/account.backup";
+import { fileBackupContribution } from "@/modules/file/file.backup";
+import { __setLocalDriverRootForTests } from "@/modules/file/storage/local";
+import { __resetDriverRegistryForTests, setActiveDriver } from "@/modules/file/storage/registry";
 import { settingsBackupContribution } from "@/modules/settings/settings.backup";
 import { streamJsonBackup } from "./export.service";
 import { __resetBackupRegistryForTests, registerBackupContribution } from "./registry";
-import { importJsonBackup, validateBackupData } from "./restore.service";
+import { importJsonBackup, reconcileRestoredFiles, validateBackupData } from "./restore.service";
 
 // The restore service relies on the global backup registry. Each test
 // resets and re-registers exactly the contributions it needs so cases
@@ -210,5 +213,69 @@ describe("importJsonBackup — error surfaces", () => {
     // The transaction must have rolled back the users insert too.
     const rows = await db.all(sql`SELECT id FROM users`);
     expect(rows).toEqual([]);
+  });
+});
+
+describe("reconcileRestoredFiles — blobs are out of backup scope", () => {
+  const present = "a".repeat(64);
+  const missing = "b".repeat(64);
+  const presentKey = `${present.slice(0, 2)}/${present.slice(2, 4)}/${present}`;
+  const missingKey = `${missing.slice(0, 2)}/${missing.slice(2, 4)}/${missing}`;
+
+  beforeEach(async () => {
+    registerBackupContribution(fileBackupContribution);
+    __resetDriverRegistryForTests();
+    const { getActiveDriver } = await import("@/modules/file/storage/registry");
+    __setLocalDriverRootForTests(resolve(dir, "blobs"));
+    setActiveDriver("local");
+    // The "present" blob is physically on disk; the "missing" one is not —
+    // simulating a backup restored onto a backend that lacks the bytes.
+    await getActiveDriver().put(presentKey, new TextEncoder().encode("real-bytes").buffer);
+  });
+
+  afterEach(() => {
+    __resetDriverRegistryForTests();
+  });
+
+  test("restore quarantines files rows whose backing blob is absent, keeps ones present", async () => {
+    await db.run(sql`INSERT INTO users (id, oauth_sub, username, name, email, role, status, created_at, updated_at) VALUES ('u_f', 'sub_f', 'fuser', 'F', 'f@example.com', 'admin', 'active', '2026-01-01T00:00:00Z', '2026-01-01T00:00:00Z')`);
+
+    const result = await importJsonBackup(db, {
+      version: 1,
+      exportedAt: "2026-05-14T00:00:00Z",
+      modules: ["files"],
+      tables: {
+        users: [
+          { id: "u_f", oauthSub: "sub_f", username: "fuser", name: "F", email: "f@example.com", role: "admin", status: "active", createdAt: "2026-01-01T00:00:00Z", updatedAt: "2026-01-01T00:00:00Z" },
+        ],
+        files: [
+          { id: "file_present", sha256: present, size: 10, mimetype: "text/plain", storageDriver: "local", storageKey: presentKey, refCount: 1, uploadedBy: "u_f" },
+          { id: "file_missing", sha256: missing, size: 10, mimetype: "text/plain", storageDriver: "local", storageKey: missingKey, refCount: 1, uploadedBy: "u_f" },
+        ],
+        file_references: [],
+      },
+    });
+    expect(result.rowsImported).toBeGreaterThanOrEqual(2);
+
+    const present_ = await db.all<{ id: string; storage_driver: string; ref_count: number }>(
+      sql`SELECT id, storage_driver, ref_count FROM files WHERE id = 'file_present'`,
+    );
+    expect(present_[0]?.storage_driver).toBe("local");
+    expect(present_[0]?.ref_count).toBe(1);
+
+    const missing_ = await db.all<{ id: string; storage_driver: string; ref_count: number }>(
+      sql`SELECT id, storage_driver, ref_count FROM files WHERE id = 'file_missing'`,
+    );
+    // Quarantined: row kept (not hard-deleted) but driver flipped to the
+    // sentinel + ref_count zeroed so downloads 404 cleanly and the GC skips it.
+    expect(missing_).toHaveLength(1);
+    expect(missing_[0]?.storage_driver).not.toBe("local");
+    expect(missing_[0]?.storage_driver).toContain("quarantined");
+    expect(missing_[0]?.ref_count).toBe(0);
+  });
+
+  test("reconcileRestoredFiles is a safe no-op when there are no files rows", async () => {
+    const r = await reconcileRestoredFiles(db);
+    expect(r).toEqual({ checked: 0, quarantined: 0 });
   });
 });

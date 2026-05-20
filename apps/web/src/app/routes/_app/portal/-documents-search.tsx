@@ -87,7 +87,7 @@ export function SearchDialog({
                           className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm transition-colors hover:bg-accent hover:text-accent-foreground"
                         >
                           <FileText className="size-3.5 shrink-0 text-muted-foreground" strokeWidth={1.75} />
-                          <span className="flex-1 truncate">{node.title || t("untitledPlaceholder", { defaultValue: "Untitled" })}</span>
+                          <span className="flex-1 truncate">{node.title || t("untitledPlaceholder")}</span>
                           <span className="shrink-0 text-[10px] tabular-nums text-muted-foreground/70">
                             {formatShortDate(node.updatedAt)}
                           </span>

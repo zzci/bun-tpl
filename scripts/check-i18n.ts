@@ -19,11 +19,18 @@
  * checked for symmetric coverage — add when the project starts using
  * i18next pluralization.
  *
+ *   4. Code → locale — every static `t("ns:key")` / `t("key")` and
+ *      ns-prefixed config literal in the web code must resolve to an
+ *      existing locale entry. Locale-only parity (1–3) never catches a
+ *      key the code asks for but no JSON provides; this does. Dynamic
+ *      keys and `defaultValue`-guarded calls are skipped (see lib).
+ *
  * Usage:  bun scripts/check-i18n.ts
  */
 import { readdirSync, readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import process from "node:process";
+import { findMissing, findUnused } from "./lib/i18n-scan";
 
 const ROOT = resolve(import.meta.dir, "..");
 const LOCALES_DIR = resolve(ROOT, "apps/web/src/locales");
@@ -181,9 +188,34 @@ for (const ns of namespaces) {
   }
 }
 
+// ── 4. Code → locale ──
+// Parity (1–3) only compares locales to each other; it is blind to a key
+// the code calls but no JSON defines. This closes that gap.
+const CODE_ROOT = resolve(ROOT, "apps/web/src");
+const missing = findMissing(LOCALES_DIR, CODE_ROOT, reference!);
+if (missing.length > 0) {
+  console.error(`[check-i18n] ${missing.length} code reference(s) resolve to no locale entry:`);
+  for (const m of missing) {
+    const rel = m.file.replace(`${ROOT}/`, "");
+    console.error(`  - "${m.raw}"  (${rel})  — tried ns: ${m.tried.join(", ")}`);
+  }
+  failed++;
+}
+
 if (failed > 0) {
-  console.error(`[check-i18n] ${failed} namespace(s) out of sync`);
+  console.error(`[check-i18n] ${failed} check(s) failed`);
   process.exit(1);
 }
 
-console.log(`[check-i18n] all ${namespaces.length} namespace(s) in sync across ${langs.length} locales`);
+// Heuristic, non-blocking: surface drift in CI logs without letting a
+// false positive break the build (deletion stays a deliberate manual op
+// via `bun scripts/clean-unused-i18n.ts`).
+const { results: unusedResults } = findUnused(LOCALES_DIR, CODE_ROOT, reference!);
+const totalUnused = unusedResults.reduce((n, r) => n + r.unused.length, 0);
+if (totalUnused > 0)
+  console.warn(`[check-i18n] note: ${totalUnused} potentially unused key(s) (heuristic, non-blocking)`);
+
+console.log(
+  `[check-i18n] all ${namespaces.length} namespace(s) in sync across ${langs.length} locales; `
+  + `code references resolve`,
+);

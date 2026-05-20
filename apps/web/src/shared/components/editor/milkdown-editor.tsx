@@ -69,6 +69,15 @@ import { useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 
 import { Button } from "@/shared/components/ui/button";
+import {
+  Dialog,
+  DialogClose,
+  DialogContent,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/shared/components/ui/dialog";
+import { Input } from "@/shared/components/ui/input";
 import { cn } from "@/shared/lib/utils";
 
 import "./milkdown-editor.css";
@@ -115,6 +124,22 @@ function ToolbarButton({
 
 function Divider() {
   return <div className="mx-0.5 h-4 w-px bg-border" aria-hidden="true" />;
+}
+
+// Only http(s) and mailto links may be applied. This blocks
+// `javascript:` / `data:` schemes that would otherwise become a stored
+// XSS vector once the markdown is rendered back as an `<a href>`.
+function isAllowedLinkUrl(raw: string): boolean {
+  const value = raw.trim();
+  if (!value)
+    return false;
+  try {
+    const url = new URL(value);
+    return url.protocol === "http:" || url.protocol === "https:" || url.protocol === "mailto:";
+  }
+  catch {
+    return false;
+  }
 }
 
 // Toggle blockquote on the current selection.
@@ -257,6 +282,9 @@ function Toolbar({
 }) {
   const { t } = useTranslation("editor");
   const [loading, getInstance] = useInstance();
+  const [linkOpen, setLinkOpen] = useState(false);
+  const [linkUrl, setLinkUrl] = useState("");
+  const [linkError, setLinkError] = useState(false);
 
   // Wrap callCommand so the button handlers stay one-liners and gracefully
   // no-op while the editor is still mounting.
@@ -269,137 +297,179 @@ function Toolbar({
     editor.action(fn);
   };
 
-  const promptLink = () => {
-    // window.prompt is the simplest cross-route prompt that doesn't require
-    // a portal / extra state — keeping it small until a future link
-    // floating-toolbar replaces this. eslint's no-alert flags it; suppress
-    // with a comment so the gate still catches accidental new uses.
-    // eslint-disable-next-line no-alert
-    const url = window.prompt(t("linkPrompt", "Enter URL"));
-    if (url == null)
+  const openLinkDialog = () => {
+    setLinkUrl("");
+    setLinkError(false);
+    setLinkOpen(true);
+  };
+
+  const submitLink = () => {
+    if (!isAllowedLinkUrl(linkUrl)) {
+      setLinkError(true);
       return;
-    run(callCommand(toggleLinkCommand.key, { href: url, title: "" }));
+    }
+    run(callCommand(toggleLinkCommand.key, { href: linkUrl.trim(), title: "" }));
+    setLinkOpen(false);
   };
 
   const iconCls = "size-3.5";
 
   return (
-    <div
-      role="toolbar"
-      aria-label={t("toolbar", "Editor toolbar")}
-      className={cn(
-        "flex flex-wrap items-center gap-0.5 bg-muted/30 px-2 py-1",
-        floating
-          ? "my-2 max-w-full self-center rounded-md border"
-          : "border-b",
-      )}
-    >
-      <ToolbarButton
-        icon={<Undo2 className={iconCls} />}
-        title={t("undo", "Undo")}
-        onClick={() => run(callCommand(undoCommand.key))}
-      />
-      <ToolbarButton
-        icon={<Redo2 className={iconCls} />}
-        title={t("redo", "Redo")}
-        onClick={() => run(callCommand(redoCommand.key))}
-      />
-      {!compact && (
-        <>
-          <Divider />
-          <ToolbarButton icon={<Heading1 className={iconCls} />} title={t("heading1", "Heading 1")} onClick={() => run(callCommand(wrapInHeadingCommand.key, 1))} />
-          <ToolbarButton icon={<Heading2 className={iconCls} />} title={t("heading2", "Heading 2")} onClick={() => run(callCommand(wrapInHeadingCommand.key, 2))} />
-          <ToolbarButton icon={<Heading3 className={iconCls} />} title={t("heading3", "Heading 3")} onClick={() => run(callCommand(wrapInHeadingCommand.key, 3))} />
-        </>
-      )}
-      <Divider />
-      <ToolbarButton
-        icon={<Bold className={iconCls} />}
-        title={t("bold")}
-        onClick={() => run(callCommand(toggleStrongCommand.key))}
-      />
-      <ToolbarButton
-        icon={<Italic className={iconCls} />}
-        title={t("italic")}
-        onClick={() => run(callCommand(toggleEmphasisCommand.key))}
-      />
-      {!compact && (
+    <>
+      <div
+        role="toolbar"
+        aria-label={t("toolbar", "Editor toolbar")}
+        className={cn(
+          "flex flex-wrap items-center gap-0.5 bg-muted/30 px-2 py-1",
+          floating
+            ? "my-2 max-w-full self-center rounded-md border"
+            : "border-b",
+        )}
+      >
         <ToolbarButton
-          icon={<Strikethrough className={iconCls} />}
-          title={t("strikethrough")}
-          onClick={() => run(callCommand(toggleStrikethroughCommand.key))}
+          icon={<Undo2 className={iconCls} />}
+          title={t("undo", "Undo")}
+          onClick={() => run(callCommand(undoCommand.key))}
         />
-      )}
-      <ToolbarButton
-        icon={<Code className={iconCls} />}
-        title={t("inlineCode")}
-        onClick={() => run(callCommand(toggleInlineCodeCommand.key))}
-      />
-      <ToolbarButton
-        icon={<LinkIcon className={iconCls} />}
-        title={t("link")}
-        onClick={promptLink}
-      />
-      <Divider />
-      <ToolbarButton
-        icon={<List className={iconCls} />}
-        title={t("bulletList")}
-        onClick={() => run(callCommand(wrapInBulletListCommand.key))}
-      />
-      <ToolbarButton
-        icon={<ListOrdered className={iconCls} />}
-        title={t("orderedList")}
-        onClick={() => run(callCommand(wrapInOrderedListCommand.key))}
-      />
-      {!compact && (
         <ToolbarButton
-          icon={<CheckSquare className={iconCls} />}
-          title={t("taskList")}
-          onClick={() => run(toggleTaskList)}
+          icon={<Redo2 className={iconCls} />}
+          title={t("redo", "Redo")}
+          onClick={() => run(callCommand(redoCommand.key))}
         />
-      )}
-      {!compact && (
-        <>
-          <Divider />
+        {!compact && (
+          <>
+            <Divider />
+            <ToolbarButton icon={<Heading1 className={iconCls} />} title={t("heading1", "Heading 1")} onClick={() => run(callCommand(wrapInHeadingCommand.key, 1))} />
+            <ToolbarButton icon={<Heading2 className={iconCls} />} title={t("heading2", "Heading 2")} onClick={() => run(callCommand(wrapInHeadingCommand.key, 2))} />
+            <ToolbarButton icon={<Heading3 className={iconCls} />} title={t("heading3", "Heading 3")} onClick={() => run(callCommand(wrapInHeadingCommand.key, 3))} />
+          </>
+        )}
+        <Divider />
+        <ToolbarButton
+          icon={<Bold className={iconCls} />}
+          title={t("bold")}
+          onClick={() => run(callCommand(toggleStrongCommand.key))}
+        />
+        <ToolbarButton
+          icon={<Italic className={iconCls} />}
+          title={t("italic")}
+          onClick={() => run(callCommand(toggleEmphasisCommand.key))}
+        />
+        {!compact && (
           <ToolbarButton
-            icon={<Quote className={iconCls} />}
-            title={t("quote")}
-            onClick={() => run(toggleBlockquote)}
+            icon={<Strikethrough className={iconCls} />}
+            title={t("strikethrough")}
+            onClick={() => run(callCommand(toggleStrikethroughCommand.key))}
           />
+        )}
+        <ToolbarButton
+          icon={<Code className={iconCls} />}
+          title={t("inlineCode")}
+          onClick={() => run(callCommand(toggleInlineCodeCommand.key))}
+        />
+        <ToolbarButton
+          icon={<LinkIcon className={iconCls} />}
+          title={t("link")}
+          onClick={openLinkDialog}
+        />
+        <Divider />
+        <ToolbarButton
+          icon={<List className={iconCls} />}
+          title={t("bulletList")}
+          onClick={() => run(callCommand(wrapInBulletListCommand.key))}
+        />
+        <ToolbarButton
+          icon={<ListOrdered className={iconCls} />}
+          title={t("orderedList")}
+          onClick={() => run(callCommand(wrapInOrderedListCommand.key))}
+        />
+        {!compact && (
           <ToolbarButton
-            icon={<Code2 className={iconCls} />}
-            title={t("codeBlock")}
-            onClick={() => run(callCommand(createCodeBlockCommand.key))}
+            icon={<CheckSquare className={iconCls} />}
+            title={t("taskList")}
+            onClick={() => run(toggleTaskList)}
           />
-          <Divider />
-          <ToolbarButton
-            icon={<TableIcon className={iconCls} />}
-            title={t("table")}
-            onClick={() => run(callCommand(insertTableCommand.key))}
-          />
-          <ToolbarButton
-            icon={<Rows3 className={iconCls} />}
-            title={t("tableAddRow", "Add row")}
-            onClick={() => run(callCommand(addRowAfterCommand.key))}
-          />
-          <ToolbarButton
-            icon={<Columns3 className={iconCls} />}
-            title={t("tableAddColumn", "Add column")}
-            onClick={() => run(callCommand(addColAfterCommand.key))}
-          />
-          <ToolbarButton
-            icon={<Trash2 className={iconCls} />}
-            title={t("tableDelete", "Delete row/column")}
-            onClick={() => run(callCommand(deleteSelectedCellsCommand.key))}
-          />
-          <ToolbarButton
-            icon={<Minus className={iconCls} />}
-            title={t("horizontalRule")}
-            onClick={() => run(callCommand(insertHrCommand.key))}
-          />
-        </>
-      )}
-    </div>
+        )}
+        {!compact && (
+          <>
+            <Divider />
+            <ToolbarButton
+              icon={<Quote className={iconCls} />}
+              title={t("quote")}
+              onClick={() => run(toggleBlockquote)}
+            />
+            <ToolbarButton
+              icon={<Code2 className={iconCls} />}
+              title={t("codeBlock")}
+              onClick={() => run(callCommand(createCodeBlockCommand.key))}
+            />
+            <Divider />
+            <ToolbarButton
+              icon={<TableIcon className={iconCls} />}
+              title={t("table")}
+              onClick={() => run(callCommand(insertTableCommand.key))}
+            />
+            <ToolbarButton
+              icon={<Rows3 className={iconCls} />}
+              title={t("tableAddRow", "Add row")}
+              onClick={() => run(callCommand(addRowAfterCommand.key))}
+            />
+            <ToolbarButton
+              icon={<Columns3 className={iconCls} />}
+              title={t("tableAddColumn", "Add column")}
+              onClick={() => run(callCommand(addColAfterCommand.key))}
+            />
+            <ToolbarButton
+              icon={<Trash2 className={iconCls} />}
+              title={t("tableDelete", "Delete row/column")}
+              onClick={() => run(callCommand(deleteSelectedCellsCommand.key))}
+            />
+            <ToolbarButton
+              icon={<Minus className={iconCls} />}
+              title={t("horizontalRule")}
+              onClick={() => run(callCommand(insertHrCommand.key))}
+            />
+          </>
+        )}
+      </div>
+      <Dialog open={linkOpen} onOpenChange={setLinkOpen}>
+        <DialogContent className="sm:max-w-sm">
+          <DialogHeader>
+            <DialogTitle>{t("linkDialogTitle")}</DialogTitle>
+          </DialogHeader>
+          <form
+            onSubmit={(e) => {
+              e.preventDefault();
+              submitLink();
+            }}
+            className="space-y-2"
+          >
+            <Input
+              type="url"
+              autoFocus
+              value={linkUrl}
+              placeholder={t("linkDialogPlaceholder")}
+              aria-label={t("linkPrompt")}
+              aria-invalid={linkError || undefined}
+              onChange={(e) => {
+                setLinkUrl(e.target.value);
+                if (linkError)
+                  setLinkError(false);
+              }}
+            />
+            {linkError && (
+              <p className="text-xs text-destructive">{t("linkInvalidUrl")}</p>
+            )}
+            <DialogFooter>
+              <DialogClose render={<Button type="button" variant="outline" />}>
+                {t("cancel")}
+              </DialogClose>
+              <Button type="submit">{t("linkInsert")}</Button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
+    </>
   );
 }
 

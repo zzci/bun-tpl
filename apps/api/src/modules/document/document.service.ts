@@ -277,12 +277,6 @@ export async function updateDocument(
   });
 }
 
-export interface MoveResult {
-  readonly conflict?: true;
-  readonly current?: DocumentRow;
-  readonly moved?: DocumentRow;
-}
-
 export async function moveDocument(
   db: AppDatabase,
   shortId: string,

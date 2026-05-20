@@ -1,9 +1,45 @@
+/**
+ * Backup RESTORE — table rows only.
+ *
+ * SCOPE CAVEAT: file blob bytes are **out of backup scope** (see the header
+ * of `export.service.ts`). A backup never carries the objects behind
+ * `files` rows; it only replays the rows. After a restore onto a
+ * deployment whose storage backend does not already hold those blobs, the
+ * `files` / `file_references` rows would point at absent objects and every
+ * download would 500.
+ *
+ * {@link reconcileRestoredFiles} runs post-restore: it asks the active
+ * storage driver whether each restored `files` blob actually exists and
+ * **quarantines** (does not delete) the rows whose backing object is gone,
+ * so a restored deployment fails loudly/visibly (a clean 404 on download
+ * via the existing `FILE_BACKEND_MISMATCH` path) instead of 500ing — and
+ * the operator keeps the row for diagnosis.
+ */
 import type { SQLiteTable } from "drizzle-orm/sqlite-core";
 import type { BackupData } from "./export.service";
 import type { AppDatabase } from "@/db";
+import type { Logger } from "@/shared/lib/logger";
 import { getTableColumns, getTableName, sql } from "drizzle-orm";
+import { getActiveDriver } from "@/modules/file/storage/registry";
 import { AppError } from "@/shared/lib/errors";
 import { getDataModules, resolveModulesWithDeps } from "./registry";
+
+/**
+ * Sentinel written into `files.storage_driver` for a quarantined row. It
+ * can never equal a real driver name, so `buildDownloadResponse`'s
+ * `driver.name !== file.storage_driver` guard turns every download attempt
+ * into the existing clean `404 FILE_BACKEND_MISMATCH` instead of a 500 — and
+ * the unreferenced-files GC's identical guard refuses to touch the row, so
+ * the quarantine is non-destructive.
+ */
+const QUARANTINE_DRIVER = "quarantined:backup-restore-missing-blob";
+
+export interface ReconcileResult {
+  /** `files` rows inspected (those still on a real, active driver). */
+  readonly checked: number;
+  /** `files` rows quarantined because their blob was absent on the backend. */
+  readonly quarantined: number;
+}
 
 const MAX_FILE_SIZE = 50 * 1024 * 1024;
 
@@ -197,10 +233,88 @@ function validateRowShape(table: SQLiteTable, tableName: string, row: Record<str
   }
 }
 
-export async function importJsonBackup(db: AppDatabase, data: BackupData): Promise<{ tablesImported: number; rowsImported: number }> {
+/**
+ * Post-restore reconciliation for the blob-out-of-scope caveat.
+ *
+ * Walks every `files` row whose `storage_driver` matches the active driver
+ * and asks the driver whether the backing object exists. Rows whose blob is
+ * absent are **quarantined** — `storage_driver` is rewritten to
+ * {@link QUARANTINE_DRIVER} and `ref_count` is zeroed — not deleted: the row
+ * survives for operator diagnosis, every download deterministically returns
+ * the existing clean `404 FILE_BACKEND_MISMATCH`, and the unreferenced-files
+ * GC skips it (its `driver.name !== storage_driver` guard).
+ *
+ * Rows already on a different/inactive driver are left untouched (the same
+ * pre-existing `FILE_BACKEND_MISMATCH` path already covers them); only rows
+ * the active driver *should* be able to serve are verified.
+ *
+ * Exported so the restore flow and tests can invoke it directly. Throws
+ * nothing — a backend probe failure is treated as "blob missing" so the
+ * restore degrades safely to the loud path rather than masking the leak.
+ */
+export async function reconcileRestoredFiles(db: AppDatabase, logger?: Logger): Promise<ReconcileResult> {
+  let driverName: string;
+  let driver: { exists: (key: string) => Promise<boolean> };
+  try {
+    const d = getActiveDriver();
+    driverName = d.name;
+    driver = d;
+  }
+  catch {
+    // No active driver selected (e.g. a restore harness with the file
+    // module uninitialised). Nothing we can verify; leave rows as-is.
+    return { checked: 0, quarantined: 0 };
+  }
+
+  const rows = await db.all<{ id: string; storage_key: string }>(sql`
+    SELECT id, storage_key FROM files WHERE storage_driver = ${driverName}
+  `);
+
+  let quarantined = 0;
+  for (const row of rows) {
+    let present: boolean;
+    try {
+      present = await driver.exists(row.storage_key);
+    }
+    catch (err) {
+      // Treat an unreadable backend as missing: fail loud, never silently
+      // serve a row we could not verify.
+      present = false;
+      logger?.warn(
+        { err: err instanceof Error ? err.message : String(err), fileId: row.id },
+        "restore reconciliation: storage existence probe failed; quarantining",
+      );
+    }
+    if (present)
+      continue;
+
+    await db.run(sql`
+      UPDATE files
+      SET storage_driver = ${QUARANTINE_DRIVER}, ref_count = 0
+      WHERE id = ${row.id}
+    `);
+    quarantined++;
+    logger?.warn(
+      { fileId: row.id, storageKey: row.storage_key },
+      "restore reconciliation: backing blob absent on storage backend; row quarantined (downloads will 404, not 500)",
+    );
+  }
+
+  if (quarantined > 0) {
+    logger?.error(
+      { checked: rows.length, quarantined },
+      "restore reconciliation: file blobs are out of backup scope and some restored rows have no backing object; quarantined them — re-seed the storage backend or accept the loss",
+    );
+  }
+
+  return { checked: rows.length, quarantined };
+}
+
+export async function importJsonBackup(db: AppDatabase, data: BackupData, logger?: Logger): Promise<{ tablesImported: number; rowsImported: number }> {
   const modules = data.modules;
   const deleteOrder = getDeleteOrder(modules);
   const insertOrder = getInsertOrder(modules);
+  const restoredFilesTable = insertOrder.some(t => getTableName(t) === "files");
 
   let tablesImported = 0;
   let rowsImported = 0;
@@ -266,6 +380,15 @@ export async function importJsonBackup(db: AppDatabase, data: BackupData): Promi
       }
     }
   });
+
+  // Blobs are out of backup scope (see header). If this restore replayed
+  // the `files` table, verify the rows against the active storage backend
+  // and quarantine any whose object is absent so downloads fail loudly
+  // (clean 404) instead of 500ing. Runs after COMMIT — the backend probe
+  // is async I/O that must not be held inside the write transaction; the
+  // quarantine writes are small, idempotent, and part of this same flow.
+  if (restoredFilesTable)
+    await reconcileRestoredFiles(db, logger);
 
   return { tablesImported, rowsImported };
 }
