@@ -191,6 +191,7 @@ export interface OidcUserInfo {
   readonly username?: string;
   readonly name?: string;
   readonly email?: string;
+  readonly email_verified?: boolean;
   readonly picture?: string;
 }
 

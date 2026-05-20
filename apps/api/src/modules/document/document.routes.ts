@@ -277,6 +277,12 @@ export function documentRoutes() {
     const existing = await getDocumentById(db, id);
     if (!existing)
       throw new NotFoundError("Document", id);
+    // Defense in depth (see GET /documents/:id): never let a subtree
+    // delete depend solely on the global policy registry.
+    const targetItem = await resolveDocumentItem(db, id);
+    if (!targetItem)
+      throw new NotFoundError("Document", id);
+    await documentAccess.assert(policyContext(c)!, "document:delete", targetItem.id);
 
     const descendantIds = await listDescendantIds(db, id);
     const descendantRows = await Promise.all(descendantIds.map(d => getDocumentById(db, d)));
@@ -336,6 +342,8 @@ export function documentRoutes() {
     const item = await resolveDocumentItem(db, id);
     if (!item)
       throw new NotFoundError("Document", id);
+    // Defense in depth (see GET /documents/:id).
+    await documentAccess.assert(policyContext(c)!, "document:upload", item.id);
 
     const config = c.get("config");
     const contentLength = Number(c.req.header("content-length") ?? "0");
@@ -411,6 +419,8 @@ export function documentRoutes() {
     const item = await resolveDocumentItem(db, id);
     if (!item)
       throw new NotFoundError("Document", id);
+    // Defense in depth (see GET /documents/:id).
+    await documentAccess.assert(policyContext(c)!, "document:delete_attachment", item.id);
     const ref = await getReferenceById(db, aid);
     if (!ref || ref.ownerType !== "item_attachment" || ref.ownerId !== item.id)
       throw new NotFoundError("Attachment", aid);

@@ -54,6 +54,9 @@ const UNLOCK_WINDOW_MS = 15 * 60 * 1000;
 const UNLOCK_MAX_ATTEMPTS = 10;
 const unlockAttempts = new Map<string, { count: number; resetAt: number }>();
 
+// Hard cap on tracked IPs per bucket — memory-DoS backstop.
+const MAX_BUCKET_ENTRIES = 1000;
+
 // /encryption/init rate limit: 5 attempts per 15 minutes per IP.
 const INIT_WINDOW_MS = 15 * 60 * 1000;
 const INIT_MAX_ATTEMPTS = 5;
@@ -110,6 +113,17 @@ function bumpBucket(
       if (now >= val.resetAt)
         bucket.delete(key);
     }
+  }
+
+  // The prune above only drops expired entries; a flood of distinct IPs
+  // stays unbounded. Evict soonest-to-reset first so an IP under active
+  // abuse (far-future resetAt) survives and the limiter stays effective.
+  if (bucket.size > MAX_BUCKET_ENTRIES) {
+    const victims = [...bucket.entries()]
+      .sort((a, b) => a[1].resetAt - b[1].resetAt)
+      .slice(0, bucket.size - MAX_BUCKET_ENTRIES);
+    for (const [key] of victims)
+      bucket.delete(key);
   }
 }
 

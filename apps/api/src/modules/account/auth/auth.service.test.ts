@@ -50,14 +50,14 @@ describe("upsertUser DEFAULT_ADMIN bootstrap", () => {
   test("assigns admin only to the first matching user", async () => {
     const first = await upsertUser(
       db,
-      { sub: "sub-admin", preferred_username: "admin", email: "admin@example.com" },
+      { sub: "sub-admin", preferred_username: "admin", email: "admin@example.com", email_verified: true },
       authConfig(["admin@example.com", "second@example.com"]),
       logger,
     );
 
     const second = await upsertUser(
       db,
-      { sub: "sub-second", preferred_username: "second", email: "second@example.com" },
+      { sub: "sub-second", preferred_username: "second", email: "second@example.com", email_verified: true },
       authConfig(["admin@example.com", "second@example.com"]),
       logger,
     );
@@ -101,7 +101,7 @@ describe("upsertUser DEFAULT_ADMIN bootstrap", () => {
 
     const admin = await upsertUser(
       db,
-      { sub: "sub-admin", preferred_username: "admin", email: "admin@example.com" },
+      { sub: "sub-admin", preferred_username: "admin", email: "admin@example.com", email_verified: true },
       authConfig(["admin@example.com"]),
       logger,
     );
@@ -114,7 +114,7 @@ describe("upsertUser DEFAULT_ADMIN bootstrap", () => {
     // 1. OAuth bootstrap admin
     const first = await upsertUser(
       db,
-      { sub: "google-12345", preferred_username: "admin", email: "admin@example.com", name: "Admin" },
+      { sub: "google-12345", preferred_username: "admin", email: "admin@example.com", email_verified: true, name: "Admin" },
       authConfig(["admin@example.com"]),
       logger,
     );
@@ -230,7 +230,7 @@ describe("upsertUser DEFAULT_ADMIN bootstrap", () => {
     // Initial bootstrap.
     const initial = await upsertUser(
       db,
-      { sub: "sub-initial", preferred_username: "initial", email: "initial@example.com" },
+      { sub: "sub-initial", preferred_username: "initial", email: "initial@example.com", email_verified: true },
       authConfig(["initial@example.com", "backup@example.com"]),
       logger,
     );
@@ -242,10 +242,57 @@ describe("upsertUser DEFAULT_ADMIN bootstrap", () => {
     // A different DEFAULT_ADMIN logs in for the first time.
     const backup = await upsertUser(
       db,
-      { sub: "sub-backup", preferred_username: "backup", email: "backup@example.com" },
+      { sub: "sub-backup", preferred_username: "backup", email: "backup@example.com", email_verified: true },
       authConfig(["initial@example.com", "backup@example.com"]),
       logger,
     );
     expect(backup.role).toBe("admin");
+  });
+
+  test("unverified email cannot bootstrap admin", async () => {
+    // email_verified absent → DEFAULT_ADMIN email match must not grant admin.
+    const attacker = await upsertUser(
+      db,
+      { sub: "attacker-sub", preferred_username: "attacker", email: "admin@example.com" },
+      authConfig(["admin@example.com", "admin2@example.com"]),
+      logger,
+    );
+    expect(attacker.role).toBe("user");
+
+    // email_verified false, distinct admin email (avoids unique-index clash).
+    const stillUser = await upsertUser(
+      db,
+      { sub: "attacker-sub-2", preferred_username: "attacker2", email: "admin2@example.com", email_verified: false },
+      authConfig(["admin@example.com", "admin2@example.com"]),
+      logger,
+    );
+    expect(stillUser.role).toBe("user");
+  });
+
+  test("unverified email cannot take over an existing (admin) row", async () => {
+    // Legitimate verified admin.
+    const victim = await upsertUser(
+      db,
+      { sub: "victim-sub", preferred_username: "victim", email: "victim@example.com", email_verified: true },
+      authConfig(["victim@example.com"]),
+      logger,
+    );
+    expect(victim.role).toBe("admin");
+
+    // Different username, victim's email, unverified: email match ignored,
+    // victim row not rebound, fresh insert collides on unique email → throws.
+    await expect(upsertUser(
+      db,
+      { sub: "attacker-sub", preferred_username: "mallory", email: "victim@example.com" },
+      authConfig(["victim@example.com"]),
+      logger,
+    )).rejects.toThrow();
+
+    const victimRow = await db.select().from(users).where(eq(users.id, victim.id)).get();
+    expect(victimRow?.oauthSub).toBe("victim-sub");
+    expect(victimRow?.role).toBe("admin");
+
+    const attackerRow = await db.select().from(users).where(eq(users.oauthSub, "attacker-sub")).get();
+    expect(attackerRow).toBeUndefined();
   });
 });

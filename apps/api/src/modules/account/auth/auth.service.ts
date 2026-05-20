@@ -111,6 +111,7 @@ interface OAuthUserInfo {
   readonly username?: string;
   readonly name?: string;
   readonly email?: string;
+  readonly email_verified?: boolean;
   readonly picture?: string;
 }
 
@@ -128,6 +129,9 @@ export async function upsertUser(
   // instead — the user can still be identified by email/name in the UI.
   const username = (userInfo.preferred_username ?? userInfo.username ?? `u_${nanoid()}`).toLowerCase();
   const email = (userInfo.email ?? "").toLowerCase();
+  // An unverified email is attacker-chosen at many IdPs; only match/bootstrap
+  // on it when the IdP asserts it verified. Username path is left intact.
+  const emailTrusted = userInfo.email_verified === true && email !== "";
 
   const existing = await db.select().from(users).where(eq(users.oauthSub, userInfo.sub)).get();
 
@@ -179,7 +183,7 @@ export async function upsertUser(
     // deliberately — if the row was an admin under either flow it stays
     // an admin; the bootstrap path below only fires for true first-time
     // logins.
-    const conflict = email
+    const conflict = emailTrusted
       ? await tx.select().from(users).where(or(eq(users.username, username), eq(users.email, email))).get()
       : await tx.select().from(users).where(eq(users.username, username)).get();
     if (conflict) {
@@ -219,7 +223,7 @@ export async function upsertUser(
     // time.
     const adminRow = await tx.select({ value: countFn() }).from(users).where(eq(users.role, "admin")).get();
     const canBootstrapAdmin = (adminRow?.value ?? 0) === 0;
-    const matchesDefaultAdmin = defaultAdmins.includes(username) || defaultAdmins.includes(email);
+    const matchesDefaultAdmin = defaultAdmins.includes(username) || (emailTrusted && defaultAdmins.includes(email));
     const isAdmin = canBootstrapAdmin && matchesDefaultAdmin;
 
     if (isAdmin) {
