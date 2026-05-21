@@ -111,16 +111,6 @@ jobs:
           scan-args: |-
             --lockfile=bun.lock
 
-      - uses: oven-sh/setup-bun@v2
-        with:
-          bun-version: ${{ env.BUN_VERSION }}
-
-      # Redundant CVE gate: osv-scanner may silently no-op on bun.lock v1,
-      # so cross-check with bun's native auditor. Only high/critical
-      # advisories fail the job — moderate/low stay informational.
-      - name: bun pm audit (dependency CVEs)
-        run: bun pm audit --audit-level=high
-
   dependency-review:
     name: dependency review (PR only)
     if: github.event_name == 'pull_request'

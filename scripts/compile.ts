@@ -60,6 +60,21 @@ const RE_SLASH_TRIM = /^\/+|\/+$/g;
 const trimmedBase = (process.env.BASE_PATH ?? "").replace(RE_SLASH_TRIM, "");
 const URL_PREFIX = trimmedBase ? `/${trimmedBase}` : "";
 
+// Run a command and return stdout, swallowing any spawn error (e.g. the
+// binary missing from $PATH inside a minimal Docker build stage where
+// `.git` is excluded by `.dockerignore` and git itself isn't installed).
+// We deliberately don't bubble the error: every caller has a fallback,
+// and the script should compile even when git is unavailable.
+function tryRun(cmd: readonly string[]): string {
+  try {
+    const result = Bun.spawnSync(cmd, { cwd: ROOT });
+    return result.stdout.toString().trim();
+  }
+  catch {
+    return "";
+  }
+}
+
 // `BUILD_COMMIT` lets the Dockerfile inject the source revision via
 // `--build-arg` — necessary because the production image excludes `.git`
 // (see .dockerignore) and `git rev-parse` would return "unknown". When run
@@ -67,14 +82,7 @@ const URL_PREFIX = trimmedBase ? `/${trimmedBase}` : "";
 // var is unset and we fall back to `git rev-parse`, finally to "unknown"
 // when neither is available.
 const envCommit = (process.env.BUILD_COMMIT ?? "").trim();
-let commit: string;
-if (envCommit) {
-  commit = envCommit;
-}
-else {
-  const gitResult = Bun.spawnSync(["git", "rev-parse", "--short", "HEAD"], { cwd: ROOT });
-  commit = gitResult.stdout.toString().trim() || "unknown";
-}
+const commit = envCommit || tryRun(["git", "rev-parse", "--short", "HEAD"]) || "unknown";
 
 // `BUILD_TIME` must be deterministic so the binary (and its SHA-256) is
 // reproducible across builds of the same source. Mirrors the BUILD_COMMIT
@@ -93,8 +101,7 @@ function resolveBuildTime(): string {
       return new Date(seconds * 1000).toISOString();
   }
 
-  const gitTime = Bun.spawnSync(["git", "show", "-s", "--format=%cI", "HEAD"], { cwd: ROOT });
-  const commitIso = gitTime.stdout.toString().trim();
+  const commitIso = tryRun(["git", "show", "-s", "--format=%cI", "HEAD"]);
   if (commitIso)
     return new Date(commitIso).toISOString();
 
