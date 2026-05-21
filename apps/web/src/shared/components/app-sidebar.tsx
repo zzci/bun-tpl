@@ -1,5 +1,5 @@
 import { Link, useRouterState } from "@tanstack/react-router";
-import { Languages, LogOut, Monitor, Moon, Palette, PanelLeftClose, PanelLeftOpen, Settings, Sun } from "lucide-react";
+import { ChevronUp, Languages, LogOut, Monitor, Moon, Palette, PanelLeftClose, PanelLeftOpen, Settings, Sun } from "lucide-react";
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Logo } from "@/shared/components/logo";
@@ -28,7 +28,6 @@ import {
   SidebarMenu,
   SidebarMenuButton,
   SidebarMenuItem,
-  SidebarRail,
   SidebarSeparator,
   useSidebar,
 } from "@/shared/components/ui/sidebar";
@@ -240,22 +239,28 @@ export function AppSidebar() {
           )}
         </SidebarContent>
 
-        {/* Footer: user avatar + dropdown */}
+        {/* Footer: user avatar + dropdown, then collapse toggle */}
         <SidebarSeparator />
         <SidebarFooter>
-          {user && (
-            <SidebarMenu>
+          <SidebarMenu>
+            {user && (
               <SidebarMenuItem>
                 <DropdownMenu>
                   <DropdownMenuTrigger
                     render={<SidebarMenuButton size="lg" />}
                   >
-                    <Avatar className="size-7">
+                    <Avatar className="size-8">
                       <AvatarFallback className="bg-primary/10 text-primary text-xs font-medium">
                         {getInitials(user.name)}
                       </AvatarFallback>
                     </Avatar>
-                    <span className="truncate text-sm">{user.name}</span>
+                    {/* Name + email stack. Hidden in icon mode along
+                        with the chevron — only the avatar remains. */}
+                    <div className="grid min-w-0 flex-1 text-left leading-tight group-data-[collapsible=icon]:hidden">
+                      <span className="truncate text-sm font-medium">{user.name}</span>
+                      <span className="truncate text-xs text-muted-foreground">{user.email}</span>
+                    </div>
+                    <ChevronUp className="ml-auto size-4 text-sidebar-foreground/70 group-data-[collapsible=icon]:hidden" />
                   </DropdownMenuTrigger>
                   <DropdownMenuContent side="top" align="start" sideOffset={8} className="w-[var(--anchor-width)] min-w-56">
                     <div className="flex items-center gap-2 px-2 py-1.5">
@@ -323,11 +328,9 @@ export function AppSidebar() {
                   </DropdownMenuContent>
                 </DropdownMenu>
               </SidebarMenuItem>
-            </SidebarMenu>
-          )}
+            )}
+          </SidebarMenu>
         </SidebarFooter>
-
-        <SidebarRail aria-label={t("nav.toggleSidebar")} />
       </Sidebar>
     </TooltipProvider>
   );

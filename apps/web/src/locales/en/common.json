@@ -55,7 +55,6 @@
     "security": "Security",
     "home": "Home",
     "expandSidebar": "Expand sidebar",
-    "collapseSidebar": "Collapse sidebar",
-    "toggleSidebar": "Toggle sidebar"
+    "collapseSidebar": "Collapse sidebar"
   }
 }
