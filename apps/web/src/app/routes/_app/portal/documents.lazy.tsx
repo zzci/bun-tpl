@@ -140,7 +140,7 @@ function DocumentsPage() {
           horizontal scroll up to the route-level `<main>` which has
           `overflow-auto`. `min-w-0` lets this container shrink inside
           the route flex column for the same reason. */}
-      <div className="-mx-4 -my-3 flex h-[calc(100svh-3rem-1px)] min-w-0 flex-col overflow-hidden md:-mx-6 md:-my-4 md:h-svh md:flex-row">
+      <div className="relative -mx-4 -my-3 flex h-[calc(100svh-3rem-1px)] min-w-0 flex-col overflow-hidden md:-mx-6 md:-my-4 md:h-svh md:flex-row">
         {/* Desktop sidebar — inline column at md+. `overflow-hidden`
           guarantees the (resizable-width) sidebar never lets its content
           visually escape into the main column or past the viewport, no
@@ -153,15 +153,19 @@ function DocumentsPage() {
         >
           <DocumentsSidebar {...sidebarProps} />
         </aside>
-        {/* Drag handle — a hair-thin invisible strip on the sidebar's
-          right edge. Highlights on hover / active drag so it stays
-          discoverable without taking visual weight when idle. */}
+        {/* Drag handle — overlays the sidebar/main boundary as a 4px
+          transparent click target (2px on each side of aside's border-r).
+          Lives outside the flex flow via absolute positioning so the
+          main column sits flush against aside; the visible boundary
+          stays the 1px `border-r`, with no break that would invite
+          extending lines across it. */}
         <div
           role="separator"
           aria-orientation="vertical"
           aria-label={t("page.title")}
           onMouseDown={startSidebarResize}
-          className="hidden cursor-col-resize bg-transparent transition-colors hover:bg-border md:block md:w-1 md:shrink-0 md:active:bg-border"
+          style={{ left: `${sidebarWidth - 2}px` }}
+          className="absolute inset-y-0 z-20 hidden w-1 cursor-col-resize bg-transparent transition-colors hover:bg-border md:block md:active:bg-border"
         />
 
         {/* Mobile sidebar — slide-in Sheet from the left, triggered by
