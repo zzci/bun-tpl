@@ -72,6 +72,9 @@ Immutable audit log records.
 `id`, `actor_id`, `actor_name`, `action`, `resource_type`, `resource_id`,
 `resource_name`, `detail`, `ip`, `user_agent`, `result`, `created_at`.
 
+`detail` is nullable (use when no structured payload makes sense); every
+other column is `NOT NULL`.
+
 ### Cron
 
 #### `cron_jobs`
@@ -84,7 +87,7 @@ filters `is_deleted=false` by default.
 | `id` | **nanoid** (8 chars). |
 | `name` | Required; unique via `idx_cron_jobs_name`. |
 | `cron` | Normalised cron expression. See `apps/api/src/modules/cron/cron-format.ts` for the supported grammar. |
-| `task_type` | Free-form category (`'builtin'` / `'custom'`). |
+| `task_type` | Mirrors the registered action's `category` (e.g. `maintenance`, `network`, `system`, `custom`). Free-form text. |
 | `task_config` | JSON text — `{ action: "<name>", ...action-specific }`. |
 | `enabled` | Integer boolean. Toggled by pause / resume; flipped to `false` automatically after `max_consecutive_failures` consecutive failures. |
 | `is_deleted` | Integer boolean. Soft-delete marker. |
@@ -124,6 +127,9 @@ viewer / editor, document parent edges, group membership, …).
 
 `id`, `namespace`, `object_id`, `relation`, `subject_namespace`,
 `subject_id`, `subject_relation`, `created_by`, `created_at`.
+
+`subject_relation` and `created_by` are nullable (system-issued tuples
+have no creator; userset-style tuples leave `subject_relation` empty).
 
 Indexes: `(namespace, object_id, relation)`, `(subject_namespace,
 subject_id, subject_relation)`, plus a unique composite on the full
@@ -227,7 +233,7 @@ Document-specific fields keyed off `item_id`.
 | `item_id`         | PK + FK → `items.id ON DELETE CASCADE`.                                                                              |
 | `content`         | Long text (≤ 50 000 chars enforced at zod boundary).                                                                  |
 | `tags`            | JSON array string. Default `'[]'`.                                                                                    |
-| `parent_id`       | Self-FK to `items.id` via `documents → items`. **Business hierarchy column** — drives the sidebar tree.               |
+| `parent_id`       | Nullable self-FK to `items.id` via `documents → items` (`ON DELETE CASCADE`). **Business hierarchy column** — drives the sidebar tree. |
 | `comments_locked` | Boolean. When 1, new comments are rejected.                                                                            |
 
 The **permission edge** for the parent hierarchy is a separate

@@ -48,11 +48,10 @@ The container declares `VOLUME /app/data`. Inside that volume the runtime writes
 | Path | Derived from | Holds | Backup priority |
 |---|---|---|---|
 | `${DB_PATH}` (default `${ROOT_DIR}/data/db/app.db`) | `DB_PATH` (or `ROOT_DIR` when unset) | `app.db`, `app.db-wal`, `app.db-shm`, `meta.db` | Critical |
-| `${ROOT_DIR}/data/uploads/documents/` | `ROOT_DIR` (always) | Document attachments | Critical |
-| `${ROOT_DIR}/data/uploads/issues/` | `ROOT_DIR` (always) | Issue attachments | Critical |
+| `${FILE_STORAGE_LOCAL_ROOT}` (default `${ROOT_DIR}/data/uploads/files/`) | `FILE_STORAGE_LOCAL_ROOT` (or `ROOT_DIR` when unset) | All attachments (documents, issues, …); content-addressable blobs under the `file` module | Critical |
 | `${ROOT_DIR}/data/logs/` | `ROOT_DIR` (`LOG_FILE` may override the file path) | Runtime logs | Operational |
 
-**Watch out — the upload and log paths are *not* re-rooted by `DB_PATH`.** Overriding `DB_PATH` to a path outside `ROOT_DIR` does **not** relocate `data/uploads/` or `data/logs/` — those continue to write under `${ROOT_DIR}/data/`. The two safe operating modes are:
+**Watch out — the upload and log paths are *not* re-rooted by `DB_PATH`.** Overriding `DB_PATH` to a path outside `ROOT_DIR` does **not** relocate `data/uploads/files/` or `data/logs/` — those continue to write under `${ROOT_DIR}/data/` unless you also set `FILE_STORAGE_LOCAL_ROOT` (or `LOG_FILE`). The two safe operating modes are:
 
 1. **Recommended:** keep `ROOT_DIR=/app/data` (the Dockerfile default) and mount a single persistent volume at `/app/data`. The DB, uploads, and logs all land under it.
 2. **Advanced:** if you must split the DB onto a separate disk, set `ROOT_DIR` to the directory you actually mounted **and** set `DB_PATH` to an absolute path on the other volume. Do not assume changing only `DB_PATH` is enough.
@@ -310,7 +309,7 @@ The `/api/backup/export` admin endpoint produces a JSON dump of selected modules
 
 ### Uploaded files
 
-`data/uploads/` is plain filesystem storage. Snapshot it together with the DB; orphaned blobs will eventually be reclaimed by the cleanup job, but mismatched DB+disk states will produce dangling references.
+`${FILE_STORAGE_LOCAL_ROOT}` (default `data/uploads/files/`) is plain filesystem storage. Snapshot it together with the DB; orphaned blobs will eventually be reclaimed by the cleanup job, but mismatched DB+disk states will produce dangling references.
 
 ## Upgrade playbook
 
@@ -327,7 +326,7 @@ Always run a restore drill (export → import on a scratch DB) before a producti
 
 ### Master-key rotation
 
-`/api/encryption/rotate-dek` is marked **EXPERIMENTAL** — known `SQLITE_IOERR` on busy WAL. The e2e suite asserts the current 500/`ROTATE_FAILED` contract so a future fix is detected automatically. Until it lands, prefer `/api/encryption/change-master` (changes the master password / re-wraps the DEK without touching ciphertext).
+`/api/encryption/rotate-dek` is marked **EXPERIMENTAL** and gated behind `ENABLE_EXPERIMENTAL_DEK_ROTATION` (default `false`). With the flag off the route returns **501 Not Implemented**. With the flag on it can still fail under busy WAL with the known `SQLITE_IOERR`; the e2e suite asserts the current 500/`ROTATE_FAILED` contract so a future fix is detected automatically. Until it lands, prefer `/api/encryption/change-master` (changes the master password / re-wraps the DEK without touching ciphertext).
 
 ## Disabling encryption
 

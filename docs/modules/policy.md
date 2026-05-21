@@ -57,6 +57,7 @@ All policy routes require admin access.
 | GET | `/api/policy/entities` | Lists users, groups, and resource groups for the policy UI. |
 | GET | `/api/policy/resource-groups` | Lists resource groups. |
 | POST | `/api/policy/resource-groups` | Creates a resource group. |
+| PATCH | `/api/policy/resource-groups/:id` | Renames a resource group (`name`, `description`). |
 | DELETE | `/api/policy/resource-groups/:id` | Deletes a resource group. |
 | GET | `/api/policy/resource-groups/:id/members` | Lists resource group members. |
 | POST | `/api/policy/resource-groups/:id/members` | Adds a resource group member. |

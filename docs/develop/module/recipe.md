@@ -283,18 +283,53 @@ Mirror the English file with translated values; **the key set must match exactly
 ### Unit: `apps/api/src/modules/<name>/<name>.test.ts`
 
 ```ts
-import { describe, expect, it } from "bun:test";
-import { makeTestDb } from "@/test-helpers/db";
+import type { AppDatabase } from "@/db";
+import { mkdirSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { resolve } from "node:path";
+import { afterEach, beforeEach, describe, expect, test } from "bun:test";
+import { customAlphabet } from "nanoid";
+import { createDb } from "@/db";
+import { users } from "@/modules/account/users/schema";
+import { loadNamespaces } from "@/modules/policy/namespace-config";
 import { create<Name>, get<Name>ByShortId } from "./<name>.service";
 
+const nanoid = customAlphabet("0123456789abcdefghijklmnopqrstuvwxyz", 8);
+
+let db: AppDatabase;
+let dbPath: string;
+
+beforeEach(async () => {
+  const dir = resolve(tmpdir(), `test-<name>-${Date.now()}-${nanoid()}`);
+  mkdirSync(dir, { recursive: true });
+  dbPath = resolve(dir, "test.db");
+  db = await createDb(dbPath);
+  loadNamespaces();
+});
+
+afterEach(() => {
+  db.close();
+  rmSync(resolve(dbPath, ".."), { recursive: true, force: true });
+});
+
 describe("<name>.service", () => {
-  it("creates and reads back a <name>", async () => {
-    const db = await makeTestDb();
-    const creator = await db.seedUser({ email: "u@example.com" });
+  test("creates and reads back a <name>", async () => {
+    const creatorId = nanoid();
+    await db.insert(users).values({
+      id: creatorId,
+      oauthSub: `sub-${creatorId}`,
+      username: `u-${creatorId}`,
+      name: "Test",
+      email: `${creatorId}@test.com`,
+      role: "user",
+      status: "active",
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    }).run();
     const created = await create<Name>(db, {
       title: "first",
       description: "hello",
-      creatorId: creator.id,
+      creatorId,
     });
     const found = await get<Name>ByShortId(db, created.shortId);
     expect(found?.title).toBe("first");
@@ -303,7 +338,7 @@ describe("<name>.service", () => {
 });
 ```
 
-Adjust the test-helper import path to match the pattern used in `apps/api/src/modules/issue/issue.test.ts` (each module sets up its own temp SQLite — see [§5.1 in standards.md](standards.md#51-backend-unit-half-of-50)).
+There is no shared test-helper module — each module stands up its own temp SQLite via `createDb`. See `apps/api/src/modules/issue/issue.test.ts` for the reference pattern (and [§5.1 in standards.md](standards.md#51-backend-unit-half-of-50)).
 
 ### E2E: `tests/e2e/modules/<name>/<NAMES>.test.ts`
 

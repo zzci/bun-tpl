@@ -194,10 +194,10 @@ Any cross-module write that is not one of the patterns above is a bug — open i
 
 ### 2.7 Auditing
 
-**Every write operation** (POST / PATCH / DELETE / trigger-style actions) must call `audit(db, …)`:
+**Every write operation** (POST / PATCH / DELETE / trigger-style actions) must call `audit(db, logger, …)`:
 
 ```ts
-await audit(db, {
+await audit(db, c.get("logger"), {
   actorId: user.id,
   actorName: user.name,
   action: "<module>.<resource>.<verb>",
@@ -297,9 +297,9 @@ The registration is a top-level side effect; `routes/protected.ts` already impor
 
 A module **must** load via i18next namespaces; **do not** append new module keys to `common.json`.
 
-**Namespaces are already enabled** (`apps/web/src/app/i18n.ts` currently sets `ns: ["common", "audit", "documents", "errors", "groups", "issues", "policies", "users"]` and lazy-loads each namespace via Vite-bundled JSON chunks):
+**Namespaces are derived from the filesystem.** `apps/web/src/app/i18n.ts` walks `apps/web/src/locales/<lng>/<ns>.json` via `import.meta.glob` and feeds the result into `supportedLngs` + `ns` at build time — no hardcoded list to maintain.
 
-- A new module author only needs to: append `"<module>"` to the `ns` array in `i18n.ts`, and place a `<module>.json` under both `apps/web/src/locales/en/` and `apps/web/src/locales/zh/`. Vite picks up the new file automatically via `import.meta.glob`.
+- A new module author only needs to: place `<module>.json` under both `apps/web/src/locales/en/` and `apps/web/src/locales/zh/`. The namespace is picked up automatically; **no edit to `i18n.ts`**.
 - Module components use `useTranslation("<module>")`; keys do **not** carry the `<module>.` prefix (the namespace already isolates them).
 - Global keys such as `common.*` / `nav.*` / `page.*` resolve automatically via `fallbackNS: "common"` — no need to write a `common:` prefix on every `t()` call.
 - When a module needs another namespace, use `useTranslation(["<module>", "<other>"])` and access the other namespace as `t("<other>:key")` (see `settings-dialog.tsx`, which mounts `common + users`).
@@ -477,7 +477,7 @@ When opening the PR, the module author must check off every item in the PR descr
 - [ ] Schema lives in `modules/<name>/schema.ts`; `db/schema.ts` only adds one `export *` line (**no table definitions**).
 - [ ] Routes mounted under `routes/protected.ts` (or `routes/public.ts` for routes that must work while the system is locked); the module-own code and aggregate-file additions are split per the two-phase commit rule (see 7.4).
 - [ ] Aggregate files each receive at most one line of change (schema re-export / route mount / sidebar NavItems / docs table row); `common.json` has **no new module keys**.
-- [ ] Every write route calls `audit(db, …)`.
+- [ ] Every write route calls `audit(db, logger, …)`.
 - [ ] If the module owns tables, a `<name>.backup.ts` exports a `BackupContribution` and the module's `index.ts` calls `registerBackupContribution(...)` (see §2.8). E2E covers the export / import round-trip.
 - [ ] **Unit + e2e together cover 100% of the module's source** (§5.0). Every changed line traces to at least one `*.test.ts` (unit) or `tests/e2e/modules/<module>/*.test.ts` (e2e); no line is in neither bucket.
 - [ ] **Every user-facing HTTP route in this module has at least one e2e case** (§5.3). New routes without matching e2e fixtures are rejected.

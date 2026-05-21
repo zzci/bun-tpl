@@ -68,6 +68,8 @@ packages/
   shared/      # ECIES utilities used by api and web
   tsconfig/    # shared tsconfig
 scripts/
+tests/
+  e2e/         # live e2e harness (dex + API + every module)
 docs/
 ```
 
@@ -111,11 +113,12 @@ apps/api/src/modules/
 
 ```text
 Request
+  -> request ID (+ propagation for outbound calls)
   -> CORS
-  -> request ID
-  -> app context injection
+  -> app context injection (db, config, logger, encryption)
   -> request logging
   -> CSRF guard
+  -> policy middleware (auto-gates routes declared via defineResource.routes)
   -> route group
   -> requireUnlocked for protected routes
   -> authRequired where the module requires a session

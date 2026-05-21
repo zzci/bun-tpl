@@ -373,14 +373,14 @@ in this guide. Read it as a real-world example before adding permissions
 to your own module:
 
 - [`apps/api/src/modules/document/document.permission.ts`](../../../apps/api/src/modules/document/document.permission.ts) — the resource declaration. 10 actions across read / edit / manage. Hooks for admin bypass, owner-only `canGrant` / `canRevoke`, audit emission on share lifecycle, entity resolution for the manifest UI.
-- [`apps/api/src/modules/document/document.routes.ts`](../../../apps/api/src/modules/document/document.routes.ts) — every gated route uses `requireDocumentPermission(action)`, a thin wrapper over `requirePermission(documentAccess, action, { idFrom })` that resolves the URL `:id` (a short_id) to the underlying `items.id`. The previous `assertAccess` / `assertOwnerOrAdmin` helpers are gone; admin / owner / shared-editor / parent-chain inheritance all funnel through one engine call.
+- [`apps/api/src/modules/document/document.routes.ts`](../../../apps/api/src/modules/document/document.routes.ts) — pure Hono. Enforcement comes from the **global `policyMiddleware`** (mounted in `app.ts`) driven by the route table declared via `defineResource.routes` in `document.permission.ts`. The middleware resolves the URL `:id` (a short_id) to the underlying `items.id` per the table's `idFrom` callback and calls `documentAccess.assert(...)` before the handler runs. The previous `assertAccess` / `assertOwnerOrAdmin` helpers are gone; admin / owner / shared-editor / parent-chain inheritance all funnel through one engine call. (Handlers that need a check beyond the URL `:id` — e.g. the document `move` route validating the *target* parent — still call `documentAccess.assert(ctx, action, id)` directly.)
 - [`apps/api/src/modules/document/document.service.ts`](../../../apps/api/src/modules/document/document.service.ts) — `addDocumentShare` / `removeDocumentShare` route writes through `documentAccess.grant` / `documentAccess.revoke`, so the framework fires `canGrant` and `onGranted` for every code path that issues a share (route handler, future bulk-share scripts, the admin debug tool).
 
 What lives where, after the migration:
 
 | Concern | Before | After |
 |---|---|---|
-| Permission decision (read / edit / delete / share / lock) | `assertAccess(db, user, doc, "viewer"/"editor")` and `assertOwnerOrAdmin(user, doc)` scattered across 13 routes | `requireDocumentPermission("document:read"/"document:update"/"document:manage"/…)` middleware on each route |
+| Permission decision (read / edit / delete / share / lock) | `assertAccess(db, user, doc, "viewer"/"editor")` and `assertOwnerOrAdmin(user, doc)` scattered across 13 routes | Global `policyMiddleware` matches the route table in `document.permission.ts` and gates each request with `documentAccess.assert("document:read"/"document:update"/"document:manage"/…)` |
 | Admin bypass | `if (user.role === "admin") return;` repeated in every helper | `bypass: ctx => ctx.actor.role === "admin"` in one place |
 | Owner-only-can-share | `assertOwnerOrAdmin` called from three share routes | `canGrant: (ctx, p) => isAdminOrOwner(ctx, p.objectId)` runs inside `grant()` |
 | Comment / attachment read gate | Manual `assertAccess viewer` lookup before list/download | Global `policyMiddleware` matches `defineResource.routes` and gates the request |

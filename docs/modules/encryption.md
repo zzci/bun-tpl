@@ -36,7 +36,7 @@ No tables. Persistence is through the libsql encryption metadata sidecar (`meta.
 | POST | `/api/encryption/init` | setup | Public until initialized, bootstrap-token gated | Initializes encryption and creates the DEK. |
 | POST | `/api/encryption/unlock` | setup | Public when locked, per-IP rate-limited | Decrypts the DEK with the master key, opens the DB, swaps the app to `unlocked`. |
 | POST | `/api/encryption/challenge` | protected | Admin | Issues an ECIES ephemeral key for sensitive admin operations (rotate / export). |
-| GET | `/api/encryption/meta` | protected | Admin | Returns master key fingerprint and rotation history. |
+| GET | `/api/encryption/meta` | protected | Admin | Returns `{encryptedDek, kdfSalt}` (null when uninitialized) for admin tooling. |
 | POST | `/api/encryption/rotate-dek` | protected | Admin (operation-locked) | **EXPERIMENTAL** — rotates the DEK and rewrites the libsql key. Gated behind `ENABLE_EXPERIMENTAL_DEK_ROTATION=true`; with the flag off the route returns 501 Not Implemented. Currently fails with `SQLITE_IOERR` under busy WAL; prefer `change-master` until the tracked fix lands. |
 | POST | `/api/encryption/change-master` | protected | Admin (operation-locked) | Re-wraps the DEK under a new master key. |
 
