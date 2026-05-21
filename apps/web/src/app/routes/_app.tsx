@@ -18,6 +18,17 @@ export const Route = createFileRoute("/_app")({
   component: AppLayout,
 });
 
+// Restore the sidebar expanded/collapsed preference from cookie on first
+// render. The Sidebar component writes to `sidebar_state` on toggle but
+// never reads it back (designed for SSR). For our SPA we hydrate it here
+// so the user's choice survives a full reload.
+function readSidebarPreference(): boolean {
+  if (typeof document === "undefined")
+    return false;
+  const match = document.cookie.match(/(?:^|;\s*)sidebar_state=([^;]+)/);
+  return match ? match[1] === "true" : false;
+}
+
 function AppLayout() {
   const { t } = useTranslation();
   const navigate = useNavigate();
@@ -27,6 +38,7 @@ function AppLayout() {
   // server" from a clean 401 unauthenticated response. `fetchUser` now
   // categorises the failure for us in a single request.
   const [networkError, setNetworkError] = useState(false);
+  const [sidebarDefaultOpen] = useState(readSidebarPreference);
 
   const loadUser = useCallback(async () => {
     setNetworkError(false);
@@ -76,7 +88,7 @@ function AppLayout() {
 
   return (
     <SidebarProvider
-      defaultOpen={false}
+      defaultOpen={sidebarDefaultOpen}
       style={{ "--sidebar-width-icon": "3.75rem" } as React.CSSProperties}
     >
       {/* WCAG 2.4.1 Bypass Blocks — first focusable target on every page;

@@ -53,6 +53,9 @@
     "settings": "Settings",
     "platformSettings": "Settings",
     "security": "Security",
-    "home": "Home"
+    "home": "Home",
+    "expandSidebar": "Expand sidebar",
+    "collapseSidebar": "Collapse sidebar",
+    "toggleSidebar": "Toggle sidebar"
   }
 }

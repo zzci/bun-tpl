@@ -53,6 +53,9 @@
     "settings": "设置",
     "platformSettings": "系统设置",
     "security": "安全",
-    "home": "首页"
+    "home": "首页",
+    "expandSidebar": "展开侧边栏",
+    "collapseSidebar": "折叠侧边栏",
+    "toggleSidebar": "切换侧边栏"
   }
 }
