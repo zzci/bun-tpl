@@ -27,6 +27,21 @@ CREATE TABLE `sessions` (
 --> statement-breakpoint
 CREATE INDEX `idx_sessions_user` ON `sessions` (`user_id`);--> statement-breakpoint
 CREATE INDEX `idx_sessions_expires` ON `sessions` (`expires_at`);--> statement-breakpoint
+CREATE TABLE `group_members` (
+	`id` text PRIMARY KEY NOT NULL,
+	`group_id` text NOT NULL,
+	`subject_namespace` text NOT NULL,
+	`subject_id` text NOT NULL,
+	`subject_relation` text,
+	`created_by` text,
+	`created_at` text NOT NULL,
+	FOREIGN KEY (`group_id`) REFERENCES `groups`(`id`) ON UPDATE no action ON DELETE cascade,
+	FOREIGN KEY (`created_by`) REFERENCES `users`(`id`) ON UPDATE no action ON DELETE no action
+);
+--> statement-breakpoint
+CREATE INDEX `idx_group_members_group` ON `group_members` (`group_id`);--> statement-breakpoint
+CREATE INDEX `idx_group_members_subject` ON `group_members` (`subject_namespace`,`subject_id`,`subject_relation`);--> statement-breakpoint
+CREATE UNIQUE INDEX `idx_group_members_unique` ON `group_members` (`group_id`,`subject_namespace`,`subject_id`,`subject_relation`);--> statement-breakpoint
 CREATE TABLE `groups` (
 	`id` text PRIMARY KEY NOT NULL,
 	`name` text NOT NULL,

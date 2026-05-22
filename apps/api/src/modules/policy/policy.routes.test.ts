@@ -427,3 +427,45 @@ describe("resource-group members", () => {
     expect(res.status).toBe(401);
   });
 });
+
+describe("POST /policy/tuples — group membership guard", () => {
+  test("rejects group:X#member writes with 422 and points to the account route", async () => {
+    const app = buildApp(db);
+    const { cookie } = await sessionCookieFor("admin");
+
+    const res = await app.request("/policy/tuples", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "Cookie": cookie },
+      body: JSON.stringify({
+        namespace: "group",
+        objectId: "g1",
+        relation: "member",
+        subjectNamespace: "user",
+        subjectId: "u1",
+      }),
+    });
+
+    expect(res.status).toBe(422);
+    const body = await res.json() as { success: boolean; error: { code: string; message: string } };
+    expect(body.success).toBe(false);
+    expect(body.error.code).toBe("VALIDATION_ERROR");
+    expect(body.error.message).toMatch(/group membership/i);
+  });
+
+  test("batch endpoint rejects a payload that includes a group:X#member create", async () => {
+    const app = buildApp(db);
+    const { cookie } = await sessionCookieFor("admin");
+
+    const res = await app.request("/policy/tuples/batch", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "Cookie": cookie },
+      body: JSON.stringify({
+        create: [
+          { namespace: "group", objectId: "g1", relation: "member", subjectNamespace: "user", subjectId: "u1" },
+        ],
+      }),
+    });
+
+    expect(res.status).toBe(422);
+  });
+});

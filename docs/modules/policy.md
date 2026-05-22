@@ -11,12 +11,14 @@ Code layout:
 
 ```text
 apps/api/src/modules/policy/
-  schema.ts                # `relation_tuples` + resource-group rows
+  schema.ts                # `relation_tuples` (group memberships live in
+                           # `account.group_members`, not here)
   namespace-config.ts      # `item` / `group` namespace declarations + rewrite rules
-  zanzibar.engine.ts       # check / expand / listUserResources implementations
-  policy.service.ts        # tuple CRUD + batch ops
+  zanzibar.engine.ts       # check / expand / listUserResources — routes
+                           # `group:*#member` reads to account.group-members
+  policy.service.ts        # tuple CRUD + batch ops (no group helpers)
   resource-group.service.ts
-  policy.routes.ts
+  policy.routes.ts         # rejects group:X#member writes — use account routes
   policy.backup.ts         # backup contribution
   index.ts                 # registers backup contribution
 ```
@@ -33,10 +35,16 @@ namespace:objectId#relation@subjectNamespace:subjectId#subjectRelation
 Examples:
 
 ```text
-document:doc123#viewer@user:user123
-document:doc123#editor@group:group123#member
-group:group123#member@user:user123
+document:doc123#viewer@user:user123              # relation_tuples
+document:doc123#editor@group:group123#member     # relation_tuples
+group:group123#member@user:user123               # account.group_members
 ```
+
+Group membership rows live in `account.group_members` (owned by the account
+module). The engine reads them through `group-members.service` so the policy
+module can be dropped without losing user-group features. `POST /api/policy/tuples`
+refuses to write `group:*#member` — callers must use
+`POST /api/account/groups/:id/members`.
 
 ## Routes
 

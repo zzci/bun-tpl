@@ -1,4 +1,5 @@
-import { sqliteTable, text, uniqueIndex } from "drizzle-orm/sqlite-core";
+import { index, sqliteTable, text, unique, uniqueIndex } from "drizzle-orm/sqlite-core";
+import { users } from "@/modules/account/users/schema";
 
 export const groups = sqliteTable("groups", {
   id: text("id").primaryKey(),
@@ -8,4 +9,28 @@ export const groups = sqliteTable("groups", {
   updatedAt: text("updated_at").notNull().$defaultFn(() => new Date().toISOString()).$onUpdateFn(() => new Date().toISOString()),
 }, t => [
   uniqueIndex("idx_groups_name").on(t.name),
+]);
+
+// `group_members` stores the `group:<groupId>#member@<subject>` edges. Owned
+// by the account module so a deployment can drop the policy module while
+// keeping user-group features.
+//
+// `subject_relation` is NULL for direct user membership and `'member'` for
+// nested-group membership (one group as a member of another).
+//
+// Note: SQLite treats every NULL as distinct under UNIQUE constraints, so the
+// `unique` below does NOT block duplicate user-membership rows; the service
+// layer guards that with an explicit pre-insert check (see addUserMember).
+export const groupMembers = sqliteTable("group_members", {
+  id: text("id").primaryKey(),
+  groupId: text("group_id").notNull().references(() => groups.id, { onDelete: "cascade" }),
+  subjectNamespace: text("subject_namespace").notNull(),
+  subjectId: text("subject_id").notNull(),
+  subjectRelation: text("subject_relation"),
+  createdBy: text("created_by").references(() => users.id),
+  createdAt: text("created_at").notNull().$defaultFn(() => new Date().toISOString()),
+}, t => [
+  unique("idx_group_members_unique").on(t.groupId, t.subjectNamespace, t.subjectId, t.subjectRelation),
+  index("idx_group_members_group").on(t.groupId),
+  index("idx_group_members_subject").on(t.subjectNamespace, t.subjectId, t.subjectRelation),
 ]);

@@ -1,12 +1,12 @@
 import type { AppDatabase } from "@/db";
 import { and, asc, count, eq, inArray, like, or } from "drizzle-orm";
-import { groups } from "@/modules/account/groups/schema";
-import { users } from "@/modules/account/users/schema";
 import {
   listGroupMembershipsForUser,
   listGroupMembershipsForUsers,
   listUserIdsInGroup,
-} from "@/modules/policy/policy.service";
+} from "@/modules/account/groups/group-members.service";
+import { groups } from "@/modules/account/groups/schema";
+import { users } from "@/modules/account/users/schema";
 
 type UserRole = "admin" | "user";
 type UserStatus = "active" | "disabled";

@@ -5,6 +5,7 @@ import { resolve } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "bun:test";
 import { customAlphabet } from "nanoid";
 import { createDb } from "@/db";
+import { groupMembers, groups } from "@/modules/account/groups/schema";
 import { relationTuples } from "@/modules/policy/schema";
 import { loadNamespaces } from "./namespace-config";
 import { check, expand, listUserResources } from "./zanzibar.engine";
@@ -36,6 +37,13 @@ const testNamespaces = [
 
 const nanoid = customAlphabet("0123456789abcdefghijklmnopqrstuvwxyz", 8);
 
+async function ensureGroup(db: AppDatabase, id: string) {
+  // `group_members.group_id` is a FK to `groups.id`; tests insert into the
+  // edge table directly so backfill the parent row on demand.
+  const now = new Date().toISOString();
+  await db.insert(groups).values({ id, name: id, description: null, createdAt: now, updatedAt: now }).onConflictDoNothing().run();
+}
+
 async function insertTuple(
   db: AppDatabase,
   ns: string,
@@ -45,6 +53,22 @@ async function insertTuple(
   subId: string,
   subRel?: string | null,
 ) {
+  // Group-membership edges live in `account.group_members`, not
+  // `relation_tuples`; route them so the engine can find them via the
+  // dedicated source path.
+  if (ns === "group" && rel === "member") {
+    await ensureGroup(db, objId);
+    await db.insert(groupMembers).values({
+      id: nanoid(),
+      groupId: objId,
+      subjectNamespace: subNs,
+      subjectId: subId,
+      subjectRelation: subRel ?? null,
+      createdBy: null,
+      createdAt: new Date().toISOString(),
+    }).run();
+    return;
+  }
   await db.insert(relationTuples).values({
     id: nanoid(),
     namespace: ns,

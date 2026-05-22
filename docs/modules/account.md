@@ -23,9 +23,10 @@ apps/api/src/modules/account/
     totp.service.ts
     index.ts
   groups/
-    schema.ts                  # `groups` (membership lives in `relation_tuples`)
+    schema.ts                  # `groups` + `group_members`
     groups.routes.ts
-    groups.service.ts
+    groups.service.ts          # group CRUD; delegates membership writes
+    group-members.service.ts   # owns user ↔ group and nested group ↔ group edges
     index.ts
 ```
 
@@ -92,13 +93,22 @@ Implemented routes:
 
 ## Policy Integration
 
-Users and groups are policy subjects:
+Users and groups are policy subjects. Resource grants to users and to groups
+are stored in `relation_tuples`, but group **membership** lives in the
+account-owned `group_members` table — this lets a deployment drop the policy
+module while keeping user-group features:
 
 ```text
-document:doc123#viewer@user:user123
-document:doc123#viewer@group:group123#member
-group:group123#member@user:user123
+document:doc123#viewer@user:user123              # in relation_tuples
+document:doc123#viewer@group:group123#member     # in relation_tuples
+group:group123#member@user:user123               # in group_members
+group:parent-team#member@group:child-team#member # in group_members (nested)
 ```
+
+The Zanzibar engine routes reads on `group:*#member` through
+`group-members.service` so the two stores never disagree. The generic
+`POST /api/policy/tuples` endpoint rejects writes to `group:*#member`;
+callers must use `POST /api/account/groups/:id/members` instead.
 
 Policy helper routes for account subjects live in the policy route module:
 

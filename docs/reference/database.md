@@ -245,14 +245,17 @@ shares table.
 
 ## Schema scope
 
-The current schema covers: accounts (users / groups / sessions / TOTP /
-preferences / PKCE state / auth lockouts), audit, settings, Zanzibar
-tuples, items + item comments, files + file references, and the two
-sub-type detail tables (`issue_details`, `document_details`).
+The current schema covers: accounts (users / groups / group memberships /
+sessions / TOTP / preferences / PKCE state / auth lockouts), audit,
+settings, Zanzibar tuples, items + item comments, files + file
+references, and the two sub-type detail tables (`issue_details`,
+`document_details`).
 
-Group membership is **not** a dedicated table — it lives as
-`relation_tuples` rows in the `group` namespace, queried via
-`policy.listGroupMembersWithJoinedAt`.
+Group membership lives in a dedicated `group_members` table owned by the
+account module — separating it from `relation_tuples` lets a deployment
+drop the policy module while keeping user-group features. The Zanzibar
+engine reads `group:*#member` through that table; everything else still
+hits `relation_tuples`.
 
 A downstream project that needs additional content modules (tickets,
 purchase orders, …) builds them on top of `item` — see

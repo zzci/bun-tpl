@@ -1,5 +1,12 @@
 import type { AppDatabase } from "@/db";
 import { and, eq, inArray, isNotNull, isNull } from "drizzle-orm";
+import {
+  findDirectMember,
+  listAllMembers,
+  listGroupIdsForUser,
+  listParentGroupsForGroup,
+  listUsersetMembers,
+} from "@/modules/account/groups/group-members.service";
 import { relationTuples } from "@/modules/policy/schema";
 import { getParentRelations, getTupleToUsersetRules } from "./namespace-config";
 
@@ -63,6 +70,16 @@ function expandKey(ns: string, objId: string, rel: string): string {
   return `${ns}:${objId}#${rel}`;
 }
 
+/**
+ * Group-membership rows for `group:<objectId>#member` live in
+ * `account.group_members`, not `relation_tuples`. The engine routes those
+ * reads through this branch so a deployment can drop the policy module
+ * without losing user-group features.
+ */
+function isGroupMembership(namespace: string, relation: string): boolean {
+  return namespace === "group" && relation === "member";
+}
+
 export async function check(
   db: AppDatabase,
   namespace: string,
@@ -91,20 +108,22 @@ export async function check(
   visited.add(key);
 
   // 1. Direct tuple match (subject_relation IS NULL)
-  const direct = await db
-    .select()
-    .from(relationTuples)
-    .where(
-      and(
-        eq(relationTuples.namespace, namespace),
-        eq(relationTuples.objectId, objectId),
-        eq(relationTuples.relation, relation),
-        eq(relationTuples.subjectNamespace, subjectNs),
-        eq(relationTuples.subjectId, subjectId),
-        isNull(relationTuples.subjectRelation),
-      ),
-    )
-    .get();
+  const direct = isGroupMembership(namespace, relation)
+    ? await findDirectMember(db, objectId, subjectNs, subjectId, null)
+    : await db
+        .select()
+        .from(relationTuples)
+        .where(
+          and(
+            eq(relationTuples.namespace, namespace),
+            eq(relationTuples.objectId, objectId),
+            eq(relationTuples.relation, relation),
+            eq(relationTuples.subjectNamespace, subjectNs),
+            eq(relationTuples.subjectId, subjectId),
+            isNull(relationTuples.subjectRelation),
+          ),
+        )
+        .get();
 
   if (direct) {
     return {
@@ -116,18 +135,20 @@ export async function check(
   // 2. Userset indirect match — find tuples with subject_relation set.
   // The `subject_relation IS NOT NULL` predicate is pushed into SQL rather
   // than JS-filtering the full result set.
-  const usersetTuples = await db
-    .select()
-    .from(relationTuples)
-    .where(
-      and(
-        eq(relationTuples.namespace, namespace),
-        eq(relationTuples.objectId, objectId),
-        eq(relationTuples.relation, relation),
-        isNotNull(relationTuples.subjectRelation),
-      ),
-    )
-    .all();
+  const usersetTuples = isGroupMembership(namespace, relation)
+    ? await listUsersetMembers(db, objectId)
+    : await db
+        .select()
+        .from(relationTuples)
+        .where(
+          and(
+            eq(relationTuples.namespace, namespace),
+            eq(relationTuples.objectId, objectId),
+            eq(relationTuples.relation, relation),
+            isNotNull(relationTuples.subjectRelation),
+          ),
+        )
+        .all();
 
   for (const tuple of usersetTuples) {
     const innerResult = await check(
@@ -222,17 +243,19 @@ export async function expand(
     return [];
   visited.add(key);
 
-  const tuples = await db
-    .select()
-    .from(relationTuples)
-    .where(
-      and(
-        eq(relationTuples.namespace, namespace),
-        eq(relationTuples.objectId, objectId),
-        eq(relationTuples.relation, relation),
-      ),
-    )
-    .all();
+  const tuples = isGroupMembership(namespace, relation)
+    ? await listAllMembers(db, objectId)
+    : await db
+        .select()
+        .from(relationTuples)
+        .where(
+          and(
+            eq(relationTuples.namespace, namespace),
+            eq(relationTuples.objectId, objectId),
+            eq(relationTuples.relation, relation),
+          ),
+        )
+        .all();
 
   const nodes: SubjectNode[] = [];
 
@@ -384,24 +407,12 @@ async function resolveUserGroups(db: AppDatabase, userId: string, budget: NodeBu
   const allGroups = new Set<string>();
 
   // Direct group memberships
-  const directGroups = await db
-    .select()
-    .from(relationTuples)
-    .where(
-      and(
-        eq(relationTuples.namespace, "group"),
-        eq(relationTuples.relation, "member"),
-        eq(relationTuples.subjectNamespace, "user"),
-        eq(relationTuples.subjectId, userId),
-        isNull(relationTuples.subjectRelation),
-      ),
-    )
-    .all();
+  const directGroupIds = await listGroupIdsForUser(db, userId);
 
   const queue: string[] = [];
-  for (const t of directGroups) {
-    allGroups.add(t.objectId);
-    queue.push(t.objectId);
+  for (const groupId of directGroupIds) {
+    allGroups.add(groupId);
+    queue.push(groupId);
   }
 
   // Resolve nested: groups that include other groups as members
@@ -409,24 +420,12 @@ async function resolveUserGroups(db: AppDatabase, userId: string, budget: NodeBu
     if (!spend(budget))
       break;
     const groupId = queue.shift()!;
-    const parentGroups = await db
-      .select()
-      .from(relationTuples)
-      .where(
-        and(
-          eq(relationTuples.namespace, "group"),
-          eq(relationTuples.relation, "member"),
-          eq(relationTuples.subjectNamespace, "group"),
-          eq(relationTuples.subjectId, groupId),
-          eq(relationTuples.subjectRelation, "member"),
-        ),
-      )
-      .all();
+    const parentIds = await listParentGroupsForGroup(db, groupId);
 
-    for (const t of parentGroups) {
-      if (!allGroups.has(t.objectId)) {
-        allGroups.add(t.objectId);
-        queue.push(t.objectId);
+    for (const parentId of parentIds) {
+      if (!allGroups.has(parentId)) {
+        allGroups.add(parentId);
+        queue.push(parentId);
       }
     }
   }

@@ -496,13 +496,19 @@ import { deleteTuplesForEntity } from "@/modules/policy/policy.service";
 export async function deleteUser(db, userId) {
   await db.delete(users).where(eq(users.id, userId));
   await deleteTuplesForEntity(db, "user", userId);
+  // Subject also appears in `group_members` (account-owned). Add a helper
+  // there if the subject can join groups, since `deleteTuplesForEntity`
+  // only touches `relation_tuples`.
 }
 ```
 
 `cascadeDelete` on the wrapper covers both object-side and subject-side
 tuples for the resource's own namespace; if the resource is a subject
 type, prefer the lower-level `deleteTuplesForEntity` since there's no
-"resource" to wrap.
+"resource" to wrap. Note that `deleteTuplesForEntity` only touches
+`relation_tuples`; if the entity can appear in `group_members`
+(users, nested groups), clean that store separately via the account
+module — see `groups.service.deleteGroup` for the pattern.
 
 ### Pattern: parent-chain inheritance
 
@@ -844,10 +850,12 @@ still call the engine directly. Migrate incrementally:
    keeps the namespace in one place).
 
 The engine remains usable; the wrapper is a layered API, not a
-replacement. Cross-module helpers
-(`listGroupIdsForUser`, `listGroupMembershipsForUsers`, …) and the raw
-debug routes (`/api/policy/check`, `/api/policy/expand`) stay on the
-engine because they don't fit the module-owns-one-resource shape.
+replacement. Cross-module group-membership helpers
+(`listGroupIdsForUser`, `listGroupMembershipsForUsers`, …) live on
+`account/groups/group-members.service.ts` rather than on policy — the
+account module owns the `group_members` table. Raw debug routes
+(`/api/policy/check`, `/api/policy/expand`) stay on the engine because
+they don't fit the module-owns-one-resource shape.
 
 ## Appendix A — built-in namespaces
 
@@ -868,7 +876,7 @@ The framework targets the 95% case "user X has relation R on object O".
 A handful of situations still call the engine directly:
 
 - **Cross-module helpers** that need raw tuple rows for indexing
-  (e.g. `policy.service.listGroupMembershipsForUsers`).
+  (e.g. `account/groups/group-members.service.listGroupMembershipsForUsers`).
 - **Hook bodies** that have to inspect the relation ladder before
   answering (avoid recursing through the wrapper from its own hooks).
 - **Admin debug routes** — `/api/policy/check`, `/api/policy/expand`,

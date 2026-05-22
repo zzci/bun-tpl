@@ -5,7 +5,7 @@ import { listGroups } from "@/modules/account/groups/groups.service";
 import { listUsers } from "@/modules/account/users/users.service";
 import { audit } from "@/modules/audit/audit.service";
 import { getClientIp } from "@/shared/lib/client-ip";
-import { NotFoundError } from "@/shared/lib/errors";
+import { NotFoundError, ValidationError } from "@/shared/lib/errors";
 import { adminRequired, authRequired } from "@/shared/middleware/auth";
 import {
   batchCreateTuples,
@@ -57,6 +57,20 @@ const batchSchema = z.object({
   delete: z.array(z.string()).optional(),
 });
 
+/**
+ * Group-membership rows live in `account.group_members`, not `relation_tuples`.
+ * Block any attempt to write them through the generic tuple endpoint so the
+ * two stores never disagree — callers should use `/api/account/groups/:id/members`.
+ */
+function rejectGroupMembershipTuple(input: { readonly namespace: string; readonly relation: string }): void {
+  if (input.namespace === "group" && input.relation === "member") {
+    throw new ValidationError(
+      "Group membership cannot be written through /policy/tuples",
+      { tuple: "Use POST /api/account/groups/:id/members instead." },
+    );
+  }
+}
+
 export function policyRoutes() {
   const router = new Hono<AppEnv>();
 
@@ -90,6 +104,8 @@ export function policyRoutes() {
     const db = c.get("db");
     const user = c.get("user")!;
     const body = tupleSchema.parse(await c.req.json());
+
+    rejectGroupMembershipTuple(body);
 
     // Auto-fill subjectRelation for group subjects
     const tupleInput = {
@@ -191,6 +207,12 @@ export function policyRoutes() {
     const db = c.get("db");
     const user = c.get("user")!;
     const body = batchSchema.parse(await c.req.json());
+
+    if (body.create) {
+      for (const input of body.create) {
+        rejectGroupMembershipTuple(input);
+      }
+    }
 
     const created = body.create ? await batchCreateTuples(db, body.create, user.id) : [];
     const deletedCount = body.delete ? await batchDeleteTuples(db, body.delete) : 0;

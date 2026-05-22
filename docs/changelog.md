@@ -11,6 +11,16 @@ each upstream tag; your fork's `Unreleased` block sits at the top.
 
 ## Unreleased
 
+### Changed
+
+- Group membership lives in a dedicated `group_members` table owned by the
+  account module instead of `relation_tuples`. The Zanzibar engine reads
+  `group:*#member` through `group-members.service` so a deployment can drop
+  the policy module while keeping user-group features.
+- `POST /api/policy/tuples` (and the batch endpoint) now refuse
+  `group:*#member` writes; callers must use
+  `POST /api/account/groups/:id/members`.
+
 ## v0.1.0 — 2026-05-14
 
 First tagged template release. Subsequent forks should anchor their
