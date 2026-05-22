@@ -128,7 +128,7 @@ function LogoToggle() {
             type="button"
             onClick={toggleSidebar}
             aria-label={label}
-            className="group/logo-toggle relative hidden size-full items-center justify-center outline-none transition-colors hover:bg-sidebar-accent focus-visible:ring-2 focus-visible:ring-sidebar-ring group-data-[collapsible=icon]:flex"
+            className="group/logo-toggle relative hidden size-full items-center justify-start pl-2.5 outline-none transition-colors hover:bg-sidebar-accent focus-visible:ring-2 focus-visible:ring-sidebar-ring group-data-[collapsible=icon]:flex"
           />
         )}
       >
@@ -170,7 +170,7 @@ export function AppSidebar() {
         <div
           data-slot="sidebar-header"
           data-sidebar="header"
-          className="flex h-11 shrink-0 items-center gap-2 px-2 group-data-[collapsible=icon]:px-0"
+          className="flex h-11 shrink-0 items-center gap-2 px-2.5 group-data-[collapsible=icon]:px-0"
         >
           {/* Expanded layout (hidden when collapsed). */}
           <div className="flex w-full items-center gap-2 group-data-[collapsible=icon]:hidden">
@@ -240,14 +240,13 @@ export function AppSidebar() {
         </SidebarContent>
 
         {/* Footer: user avatar + dropdown, then collapse toggle */}
-        <SidebarSeparator />
         <SidebarFooter>
           <SidebarMenu>
             {user && (
               <SidebarMenuItem>
                 <DropdownMenu>
                   <DropdownMenuTrigger
-                    render={<SidebarMenuButton size="lg" />}
+                    render={<SidebarMenuButton size="lg" className="transition-[height,padding] group-data-[collapsible=icon]:justify-center" />}
                   >
                     <Avatar className="size-8">
                       <AvatarFallback className="bg-primary/10 text-primary text-xs font-medium">
@@ -262,7 +261,7 @@ export function AppSidebar() {
                     </div>
                     <ChevronUp className="ml-auto size-4 text-sidebar-foreground/70 group-data-[collapsible=icon]:hidden" />
                   </DropdownMenuTrigger>
-                  <DropdownMenuContent side="top" align="start" sideOffset={8} className="w-[var(--anchor-width)] min-w-56">
+                  <DropdownMenuContent side="top" align="start" sideOffset={8} className="w-[var(--anchor-width)] min-w-48">
                     <div className="flex items-center gap-2 px-2 py-1.5">
                       <Avatar className="size-8">
                         <AvatarFallback className="bg-primary/10 text-primary text-xs font-medium">

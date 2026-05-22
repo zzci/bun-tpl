@@ -89,7 +89,7 @@ function AppLayout() {
   return (
     <SidebarProvider
       defaultOpen={sidebarDefaultOpen}
-      style={{ "--sidebar-width-icon": "3.75rem" } as React.CSSProperties}
+      style={{ "--sidebar-width-icon": "3rem" } as React.CSSProperties}
     >
       {/* WCAG 2.4.1 Bypass Blocks — first focusable target on every page;
           becomes visible on keyboard focus and jumps past the sidebar. */}

@@ -34,7 +34,7 @@ type Mode = { type: "empty" } | { type: "new" } | { type: "detail"; docId: strin
 // main column collapses.
 const SIDEBAR_WIDTH_MIN = 200;
 const SIDEBAR_WIDTH_MAX = 480;
-const SIDEBAR_WIDTH_DEFAULT = 288;
+const SIDEBAR_WIDTH_DEFAULT = 224;
 const SIDEBAR_WIDTH_KEY = "documents.sidebarWidth";
 
 function clampWidth(n: number) {
