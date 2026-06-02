@@ -17,3 +17,4 @@ coverage/
 *.gen.ts
 !apps/web/src/app/routeTree.gen.ts
 .secret/
+data-docker/

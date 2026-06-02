@@ -1,0 +1,37 @@
+# Production-style deployment behind an external Traefik reverse proxy.
+#
+# Prerequisites:
+#   - An external Docker network named `traefik`:
+#       docker network create traefik
+#   - A `.env.docker` next to this file with the runtime env
+#     (copy `.env.docker.example` and fill it in).
+#   - An image tagged `${APP_NAME}:latest` (built from the repo Dockerfile
+#     or your release CI).
+#
+# `${APP_NAME}` is substituted from a `.env` in this directory (defaulting to
+# `app`). Edit the Host rule, entrypoint and certresolver below to match your
+# Traefik static configuration.
+services:
+  app:
+    container_name: ${APP_NAME:-app}
+    hostname: ${APP_NAME:-app}
+    image: ${APP_NAME:-app}:latest
+    restart: unless-stopped
+    env_file:
+      - .env.docker
+    volumes:
+      - ./data-docker:/app/data
+    networks:
+      - traefik
+    labels:
+      - "traefik.enable=true"
+      - "traefik.docker.network=traefik"
+      - "traefik.http.routers.${APP_NAME:-app}.rule=Host(`${APP_NAME:-app}.example.com`)"
+      - "traefik.http.routers.${APP_NAME:-app}.entrypoints=websecure"
+      - "traefik.http.routers.${APP_NAME:-app}.tls=true"
+      - "traefik.http.routers.${APP_NAME:-app}.tls.certresolver=le"
+      - "traefik.http.services.${APP_NAME:-app}.loadbalancer.server.port=3000"
+
+networks:
+  traefik:
+    external: true
