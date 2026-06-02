@@ -19,7 +19,7 @@ interface AuthMode {
   oauthConfigured: boolean;
 }
 
-export const Route = createFileRoute("/login")({
+export const Route = createFileRoute("/(auth)/login")({
   staticData: { titleKey: "login:title" },
   component: LoginPage,
   validateSearch: (search: Record<string, unknown>): LoginSearchParams => ({
@@ -29,9 +29,9 @@ export const Route = createFileRoute("/login")({
 
 function isSafeRedirect(url: string | undefined): string {
   if (!url)
-    return `${BASE_PATH}/portal`;
+    return `${BASE_PATH}/overview`;
   if (!url.startsWith("/") || url.startsWith("//"))
-    return `${BASE_PATH}/portal`;
+    return `${BASE_PATH}/overview`;
   return url;
 }
 

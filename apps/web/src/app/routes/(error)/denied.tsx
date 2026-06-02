@@ -12,7 +12,7 @@ interface DeniedSearchParams {
   aid: string | undefined;
 }
 
-export const Route = createFileRoute("/denied")({
+export const Route = createFileRoute("/(error)/denied")({
   component: DeniedPage,
   validateSearch: (search: Record<string, unknown>): DeniedSearchParams => ({
     reason: typeof search.reason === "string" ? search.reason : undefined,
@@ -96,7 +96,7 @@ function DeniedPage() {
         <div className="mt-8 flex flex-wrap items-center justify-center gap-4">
           {showBackToPortal && (
             <Link
-              to="/portal"
+              to="/overview"
               className="inline-flex h-8 items-center justify-center rounded-lg border border-border bg-background px-3 text-sm font-medium hover:bg-muted"
             >
               {t("denied:backToPortal")}

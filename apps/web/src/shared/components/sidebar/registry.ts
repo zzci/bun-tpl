@@ -4,12 +4,12 @@ import { cronNav } from "@/app/routes/_app/admin/-cron.nav";
 import { policiesNav } from "@/app/routes/_app/admin/-policies.nav";
 import { settingsNav } from "@/app/routes/_app/admin/-settings.nav";
 import { usersNav } from "@/app/routes/_app/admin/-users.nav";
-import { documentsNav } from "@/app/routes/_app/portal/-documents.nav";
-import { issuesNav } from "@/app/routes/_app/portal/-issues.nav";
-import { portalNav } from "@/app/routes/_app/portal/-portal.nav";
+import { documentsNav } from "@/app/routes/_app/documents/-documents.nav";
+import { issuesNav } from "@/app/routes/_app/issues/-issues.nav";
+import { overviewNav } from "@/app/routes/_app/overview/-overview.nav";
 
 const NAV_ITEMS: readonly NavItem[] = [
-  portalNav,
+  overviewNav,
   issuesNav,
   documentsNav,
   usersNav,

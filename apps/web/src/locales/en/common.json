@@ -43,7 +43,7 @@
     }
   },
   "nav": {
-    "portal": "Portal",
+    "overview": "Overview",
     "users": "Users",
     "policies": "Policies",
     "myIssues": "My Issues",

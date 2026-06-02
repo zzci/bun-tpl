@@ -9,130 +9,137 @@
 // Additionally, you should also exclude this file from your linter and/or formatter to prevent it from being checked or modified.
 
 import { Route as rootRouteImport } from './routes/__root'
-import { Route as UnlockRouteImport } from './routes/unlock'
-import { Route as TotpVerifyRouteImport } from './routes/totp-verify'
-import { Route as SetupRouteImport } from './routes/setup'
-import { Route as LoginRouteImport } from './routes/login'
-import { Route as ErrorRouteImport } from './routes/error'
-import { Route as DeniedRouteImport } from './routes/denied'
-import { Route as AppRouteImport } from './routes/_app'
-import { Route as IndexRouteImport } from './routes/index'
-import { Route as AppAdminRouteImport } from './routes/_app/admin'
-import { Route as AppPortalIndexRouteImport } from './routes/_app/portal/index'
-import { Route as AppPortalIssuesRouteImport } from './routes/_app/portal/issues'
-import { Route as AppPortalDocumentsRouteImport } from './routes/_app/portal/documents'
+import { Route as AppRouteRouteImport } from './routes/_app/route'
+import { Route as AppIndexRouteImport } from './routes/_app/index'
+import { Route as errorErrorRouteImport } from './routes/(error)/error'
+import { Route as errorDeniedRouteImport } from './routes/(error)/denied'
+import { Route as encryptionUnlockRouteImport } from './routes/(encryption)/unlock'
+import { Route as encryptionSetupRouteImport } from './routes/(encryption)/setup'
+import { Route as authTotpVerifyRouteImport } from './routes/(auth)/totp-verify'
+import { Route as authLoginRouteImport } from './routes/(auth)/login'
+import { Route as AppOverviewRouteRouteImport } from './routes/_app/overview/route'
+import { Route as AppIssuesRouteRouteImport } from './routes/_app/issues/route'
+import { Route as AppDocumentsRouteRouteImport } from './routes/_app/documents/route'
+import { Route as AppAdminRouteRouteImport } from './routes/_app/admin/route'
+import { Route as AppIssuesIndexRouteImport } from './routes/_app/issues/index'
+import { Route as AppIssuesIssueIdRouteImport } from './routes/_app/issues/$issueId'
 import { Route as AppAdminUsersRouteImport } from './routes/_app/admin/users'
 import { Route as AppAdminSettingsRouteImport } from './routes/_app/admin/settings'
 import { Route as AppAdminPoliciesRouteImport } from './routes/_app/admin/policies'
 import { Route as AppAdminCronRouteImport } from './routes/_app/admin/cron'
 import { Route as AppAdminAuditRouteImport } from './routes/_app/admin/audit'
-import { Route as AppPortalIssuesIndexRouteImport } from './routes/_app/portal/issues/index'
 import { Route as AppAdminUsersIndexRouteImport } from './routes/_app/admin/users/index'
-import { Route as AppPortalIssuesIssueIdRouteImport } from './routes/_app/portal/issues/$issueId'
 import { Route as AppAdminUsersGroupsRouteImport } from './routes/_app/admin/users/groups'
 
-const UnlockRoute = UnlockRouteImport.update({
-  id: '/unlock',
-  path: '/unlock',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const TotpVerifyRoute = TotpVerifyRouteImport.update({
-  id: '/totp-verify',
-  path: '/totp-verify',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const SetupRoute = SetupRouteImport.update({
-  id: '/setup',
-  path: '/setup',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const LoginRoute = LoginRouteImport.update({
-  id: '/login',
-  path: '/login',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const ErrorRoute = ErrorRouteImport.update({
-  id: '/error',
-  path: '/error',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const DeniedRoute = DeniedRouteImport.update({
-  id: '/denied',
-  path: '/denied',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const AppRoute = AppRouteImport.update({
+const AppRouteRoute = AppRouteRouteImport.update({
   id: '/_app',
   getParentRoute: () => rootRouteImport,
 } as any)
-const IndexRoute = IndexRouteImport.update({
+const AppIndexRoute = AppIndexRouteImport.update({
   id: '/',
   path: '/',
+  getParentRoute: () => AppRouteRoute,
+} as any)
+const errorErrorRoute = errorErrorRouteImport.update({
+  id: '/(error)/error',
+  path: '/error',
   getParentRoute: () => rootRouteImport,
 } as any)
-const AppAdminRoute = AppAdminRouteImport.update({
+const errorDeniedRoute = errorDeniedRouteImport.update({
+  id: '/(error)/denied',
+  path: '/denied',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const encryptionUnlockRoute = encryptionUnlockRouteImport.update({
+  id: '/(encryption)/unlock',
+  path: '/unlock',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const encryptionSetupRoute = encryptionSetupRouteImport.update({
+  id: '/(encryption)/setup',
+  path: '/setup',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const authTotpVerifyRoute = authTotpVerifyRouteImport.update({
+  id: '/(auth)/totp-verify',
+  path: '/totp-verify',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const authLoginRoute = authLoginRouteImport.update({
+  id: '/(auth)/login',
+  path: '/login',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const AppOverviewRouteRoute = AppOverviewRouteRouteImport.update({
+  id: '/overview',
+  path: '/overview',
+  getParentRoute: () => AppRouteRoute,
+} as any).lazy(() =>
+  import('./routes/_app/overview/route.lazy').then((d) => d.Route),
+)
+const AppIssuesRouteRoute = AppIssuesRouteRouteImport.update({
+  id: '/issues',
+  path: '/issues',
+  getParentRoute: () => AppRouteRoute,
+} as any)
+const AppDocumentsRouteRoute = AppDocumentsRouteRouteImport.update({
+  id: '/documents',
+  path: '/documents',
+  getParentRoute: () => AppRouteRoute,
+} as any).lazy(() =>
+  import('./routes/_app/documents/route.lazy').then((d) => d.Route),
+)
+const AppAdminRouteRoute = AppAdminRouteRouteImport.update({
   id: '/admin',
   path: '/admin',
-  getParentRoute: () => AppRoute,
+  getParentRoute: () => AppRouteRoute,
 } as any)
-const AppPortalIndexRoute = AppPortalIndexRouteImport.update({
-  id: '/portal/',
-  path: '/portal/',
-  getParentRoute: () => AppRoute,
+const AppIssuesIndexRoute = AppIssuesIndexRouteImport.update({
+  id: '/',
+  path: '/',
+  getParentRoute: () => AppIssuesRouteRoute,
 } as any).lazy(() =>
-  import('./routes/_app/portal/index.lazy').then((d) => d.Route),
+  import('./routes/_app/issues/index.lazy').then((d) => d.Route),
 )
-const AppPortalIssuesRoute = AppPortalIssuesRouteImport.update({
-  id: '/portal/issues',
-  path: '/portal/issues',
-  getParentRoute: () => AppRoute,
-} as any)
-const AppPortalDocumentsRoute = AppPortalDocumentsRouteImport.update({
-  id: '/portal/documents',
-  path: '/portal/documents',
-  getParentRoute: () => AppRoute,
+const AppIssuesIssueIdRoute = AppIssuesIssueIdRouteImport.update({
+  id: '/$issueId',
+  path: '/$issueId',
+  getParentRoute: () => AppIssuesRouteRoute,
 } as any).lazy(() =>
-  import('./routes/_app/portal/documents.lazy').then((d) => d.Route),
+  import('./routes/_app/issues/$issueId.lazy').then((d) => d.Route),
 )
 const AppAdminUsersRoute = AppAdminUsersRouteImport.update({
   id: '/users',
   path: '/users',
-  getParentRoute: () => AppAdminRoute,
+  getParentRoute: () => AppAdminRouteRoute,
 } as any)
 const AppAdminSettingsRoute = AppAdminSettingsRouteImport.update({
   id: '/settings',
   path: '/settings',
-  getParentRoute: () => AppAdminRoute,
+  getParentRoute: () => AppAdminRouteRoute,
 } as any).lazy(() =>
   import('./routes/_app/admin/settings.lazy').then((d) => d.Route),
 )
 const AppAdminPoliciesRoute = AppAdminPoliciesRouteImport.update({
   id: '/policies',
   path: '/policies',
-  getParentRoute: () => AppAdminRoute,
+  getParentRoute: () => AppAdminRouteRoute,
 } as any).lazy(() =>
   import('./routes/_app/admin/policies.lazy').then((d) => d.Route),
 )
 const AppAdminCronRoute = AppAdminCronRouteImport.update({
   id: '/cron',
   path: '/cron',
-  getParentRoute: () => AppAdminRoute,
+  getParentRoute: () => AppAdminRouteRoute,
 } as any).lazy(() =>
   import('./routes/_app/admin/cron.lazy').then((d) => d.Route),
 )
 const AppAdminAuditRoute = AppAdminAuditRouteImport.update({
   id: '/audit',
   path: '/audit',
-  getParentRoute: () => AppAdminRoute,
+  getParentRoute: () => AppAdminRouteRoute,
 } as any).lazy(() =>
   import('./routes/_app/admin/audit.lazy').then((d) => d.Route),
-)
-const AppPortalIssuesIndexRoute = AppPortalIssuesIndexRouteImport.update({
-  id: '/',
-  path: '/',
-  getParentRoute: () => AppPortalIssuesRoute,
-} as any).lazy(() =>
-  import('./routes/_app/portal/issues/index.lazy').then((d) => d.Route),
 )
 const AppAdminUsersIndexRoute = AppAdminUsersIndexRouteImport.update({
   id: '/',
@@ -140,13 +147,6 @@ const AppAdminUsersIndexRoute = AppAdminUsersIndexRouteImport.update({
   getParentRoute: () => AppAdminUsersRoute,
 } as any).lazy(() =>
   import('./routes/_app/admin/users/index.lazy').then((d) => d.Route),
-)
-const AppPortalIssuesIssueIdRoute = AppPortalIssuesIssueIdRouteImport.update({
-  id: '/$issueId',
-  path: '/$issueId',
-  getParentRoute: () => AppPortalIssuesRoute,
-} as any).lazy(() =>
-  import('./routes/_app/portal/issues/$issueId.lazy').then((d) => d.Route),
 )
 const AppAdminUsersGroupsRoute = AppAdminUsersGroupsRouteImport.update({
   id: '/groups',
@@ -157,277 +157,283 @@ const AppAdminUsersGroupsRoute = AppAdminUsersGroupsRouteImport.update({
 )
 
 export interface FileRoutesByFullPath {
-  '/': typeof IndexRoute
-  '/denied': typeof DeniedRoute
-  '/error': typeof ErrorRoute
-  '/login': typeof LoginRoute
-  '/setup': typeof SetupRoute
-  '/totp-verify': typeof TotpVerifyRoute
-  '/unlock': typeof UnlockRoute
-  '/admin': typeof AppAdminRouteWithChildren
+  '/': typeof AppIndexRoute
+  '/admin': typeof AppAdminRouteRouteWithChildren
+  '/documents': typeof AppDocumentsRouteRoute
+  '/issues': typeof AppIssuesRouteRouteWithChildren
+  '/overview': typeof AppOverviewRouteRoute
+  '/login': typeof authLoginRoute
+  '/totp-verify': typeof authTotpVerifyRoute
+  '/setup': typeof encryptionSetupRoute
+  '/unlock': typeof encryptionUnlockRoute
+  '/denied': typeof errorDeniedRoute
+  '/error': typeof errorErrorRoute
   '/admin/audit': typeof AppAdminAuditRoute
   '/admin/cron': typeof AppAdminCronRoute
   '/admin/policies': typeof AppAdminPoliciesRoute
   '/admin/settings': typeof AppAdminSettingsRoute
   '/admin/users': typeof AppAdminUsersRouteWithChildren
-  '/portal/documents': typeof AppPortalDocumentsRoute
-  '/portal/issues': typeof AppPortalIssuesRouteWithChildren
-  '/portal/': typeof AppPortalIndexRoute
+  '/issues/$issueId': typeof AppIssuesIssueIdRoute
+  '/issues/': typeof AppIssuesIndexRoute
   '/admin/users/groups': typeof AppAdminUsersGroupsRoute
-  '/portal/issues/$issueId': typeof AppPortalIssuesIssueIdRoute
   '/admin/users/': typeof AppAdminUsersIndexRoute
-  '/portal/issues/': typeof AppPortalIssuesIndexRoute
 }
 export interface FileRoutesByTo {
-  '/': typeof IndexRoute
-  '/denied': typeof DeniedRoute
-  '/error': typeof ErrorRoute
-  '/login': typeof LoginRoute
-  '/setup': typeof SetupRoute
-  '/totp-verify': typeof TotpVerifyRoute
-  '/unlock': typeof UnlockRoute
-  '/admin': typeof AppAdminRouteWithChildren
+  '/admin': typeof AppAdminRouteRouteWithChildren
+  '/documents': typeof AppDocumentsRouteRoute
+  '/overview': typeof AppOverviewRouteRoute
+  '/login': typeof authLoginRoute
+  '/totp-verify': typeof authTotpVerifyRoute
+  '/setup': typeof encryptionSetupRoute
+  '/unlock': typeof encryptionUnlockRoute
+  '/denied': typeof errorDeniedRoute
+  '/error': typeof errorErrorRoute
+  '/': typeof AppIndexRoute
   '/admin/audit': typeof AppAdminAuditRoute
   '/admin/cron': typeof AppAdminCronRoute
   '/admin/policies': typeof AppAdminPoliciesRoute
   '/admin/settings': typeof AppAdminSettingsRoute
-  '/portal/documents': typeof AppPortalDocumentsRoute
-  '/portal': typeof AppPortalIndexRoute
+  '/issues/$issueId': typeof AppIssuesIssueIdRoute
+  '/issues': typeof AppIssuesIndexRoute
   '/admin/users/groups': typeof AppAdminUsersGroupsRoute
-  '/portal/issues/$issueId': typeof AppPortalIssuesIssueIdRoute
   '/admin/users': typeof AppAdminUsersIndexRoute
-  '/portal/issues': typeof AppPortalIssuesIndexRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
-  '/': typeof IndexRoute
-  '/_app': typeof AppRouteWithChildren
-  '/denied': typeof DeniedRoute
-  '/error': typeof ErrorRoute
-  '/login': typeof LoginRoute
-  '/setup': typeof SetupRoute
-  '/totp-verify': typeof TotpVerifyRoute
-  '/unlock': typeof UnlockRoute
-  '/_app/admin': typeof AppAdminRouteWithChildren
+  '/_app': typeof AppRouteRouteWithChildren
+  '/_app/admin': typeof AppAdminRouteRouteWithChildren
+  '/_app/documents': typeof AppDocumentsRouteRoute
+  '/_app/issues': typeof AppIssuesRouteRouteWithChildren
+  '/_app/overview': typeof AppOverviewRouteRoute
+  '/(auth)/login': typeof authLoginRoute
+  '/(auth)/totp-verify': typeof authTotpVerifyRoute
+  '/(encryption)/setup': typeof encryptionSetupRoute
+  '/(encryption)/unlock': typeof encryptionUnlockRoute
+  '/(error)/denied': typeof errorDeniedRoute
+  '/(error)/error': typeof errorErrorRoute
+  '/_app/': typeof AppIndexRoute
   '/_app/admin/audit': typeof AppAdminAuditRoute
   '/_app/admin/cron': typeof AppAdminCronRoute
   '/_app/admin/policies': typeof AppAdminPoliciesRoute
   '/_app/admin/settings': typeof AppAdminSettingsRoute
   '/_app/admin/users': typeof AppAdminUsersRouteWithChildren
-  '/_app/portal/documents': typeof AppPortalDocumentsRoute
-  '/_app/portal/issues': typeof AppPortalIssuesRouteWithChildren
-  '/_app/portal/': typeof AppPortalIndexRoute
+  '/_app/issues/$issueId': typeof AppIssuesIssueIdRoute
+  '/_app/issues/': typeof AppIssuesIndexRoute
   '/_app/admin/users/groups': typeof AppAdminUsersGroupsRoute
-  '/_app/portal/issues/$issueId': typeof AppPortalIssuesIssueIdRoute
   '/_app/admin/users/': typeof AppAdminUsersIndexRoute
-  '/_app/portal/issues/': typeof AppPortalIssuesIndexRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
   fullPaths:
     | '/'
+    | '/admin'
+    | '/documents'
+    | '/issues'
+    | '/overview'
+    | '/login'
+    | '/totp-verify'
+    | '/setup'
+    | '/unlock'
     | '/denied'
     | '/error'
-    | '/login'
-    | '/setup'
-    | '/totp-verify'
-    | '/unlock'
-    | '/admin'
     | '/admin/audit'
     | '/admin/cron'
     | '/admin/policies'
     | '/admin/settings'
     | '/admin/users'
-    | '/portal/documents'
-    | '/portal/issues'
-    | '/portal/'
+    | '/issues/$issueId'
+    | '/issues/'
     | '/admin/users/groups'
-    | '/portal/issues/$issueId'
     | '/admin/users/'
-    | '/portal/issues/'
   fileRoutesByTo: FileRoutesByTo
   to:
-    | '/'
+    | '/admin'
+    | '/documents'
+    | '/overview'
+    | '/login'
+    | '/totp-verify'
+    | '/setup'
+    | '/unlock'
     | '/denied'
     | '/error'
-    | '/login'
-    | '/setup'
-    | '/totp-verify'
-    | '/unlock'
-    | '/admin'
+    | '/'
     | '/admin/audit'
     | '/admin/cron'
     | '/admin/policies'
     | '/admin/settings'
-    | '/portal/documents'
-    | '/portal'
+    | '/issues/$issueId'
+    | '/issues'
     | '/admin/users/groups'
-    | '/portal/issues/$issueId'
     | '/admin/users'
-    | '/portal/issues'
   id:
     | '__root__'
-    | '/'
     | '/_app'
-    | '/denied'
-    | '/error'
-    | '/login'
-    | '/setup'
-    | '/totp-verify'
-    | '/unlock'
     | '/_app/admin'
+    | '/_app/documents'
+    | '/_app/issues'
+    | '/_app/overview'
+    | '/(auth)/login'
+    | '/(auth)/totp-verify'
+    | '/(encryption)/setup'
+    | '/(encryption)/unlock'
+    | '/(error)/denied'
+    | '/(error)/error'
+    | '/_app/'
     | '/_app/admin/audit'
     | '/_app/admin/cron'
     | '/_app/admin/policies'
     | '/_app/admin/settings'
     | '/_app/admin/users'
-    | '/_app/portal/documents'
-    | '/_app/portal/issues'
-    | '/_app/portal/'
+    | '/_app/issues/$issueId'
+    | '/_app/issues/'
     | '/_app/admin/users/groups'
-    | '/_app/portal/issues/$issueId'
     | '/_app/admin/users/'
-    | '/_app/portal/issues/'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
-  IndexRoute: typeof IndexRoute
-  AppRoute: typeof AppRouteWithChildren
-  DeniedRoute: typeof DeniedRoute
-  ErrorRoute: typeof ErrorRoute
-  LoginRoute: typeof LoginRoute
-  SetupRoute: typeof SetupRoute
-  TotpVerifyRoute: typeof TotpVerifyRoute
-  UnlockRoute: typeof UnlockRoute
+  AppRouteRoute: typeof AppRouteRouteWithChildren
+  authLoginRoute: typeof authLoginRoute
+  authTotpVerifyRoute: typeof authTotpVerifyRoute
+  encryptionSetupRoute: typeof encryptionSetupRoute
+  encryptionUnlockRoute: typeof encryptionUnlockRoute
+  errorDeniedRoute: typeof errorDeniedRoute
+  errorErrorRoute: typeof errorErrorRoute
 }
 
 declare module '@tanstack/react-router' {
   interface FileRoutesByPath {
-    '/unlock': {
-      id: '/unlock'
-      path: '/unlock'
-      fullPath: '/unlock'
-      preLoaderRoute: typeof UnlockRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/totp-verify': {
-      id: '/totp-verify'
-      path: '/totp-verify'
-      fullPath: '/totp-verify'
-      preLoaderRoute: typeof TotpVerifyRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/setup': {
-      id: '/setup'
-      path: '/setup'
-      fullPath: '/setup'
-      preLoaderRoute: typeof SetupRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/login': {
-      id: '/login'
-      path: '/login'
-      fullPath: '/login'
-      preLoaderRoute: typeof LoginRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/error': {
-      id: '/error'
-      path: '/error'
-      fullPath: '/error'
-      preLoaderRoute: typeof ErrorRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/denied': {
-      id: '/denied'
-      path: '/denied'
-      fullPath: '/denied'
-      preLoaderRoute: typeof DeniedRouteImport
-      parentRoute: typeof rootRouteImport
-    }
     '/_app': {
       id: '/_app'
       path: ''
       fullPath: '/'
-      preLoaderRoute: typeof AppRouteImport
+      preLoaderRoute: typeof AppRouteRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/': {
-      id: '/'
+    '/_app/': {
+      id: '/_app/'
       path: '/'
       fullPath: '/'
-      preLoaderRoute: typeof IndexRouteImport
+      preLoaderRoute: typeof AppIndexRouteImport
+      parentRoute: typeof AppRouteRoute
+    }
+    '/(error)/error': {
+      id: '/(error)/error'
+      path: '/error'
+      fullPath: '/error'
+      preLoaderRoute: typeof errorErrorRouteImport
       parentRoute: typeof rootRouteImport
+    }
+    '/(error)/denied': {
+      id: '/(error)/denied'
+      path: '/denied'
+      fullPath: '/denied'
+      preLoaderRoute: typeof errorDeniedRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/(encryption)/unlock': {
+      id: '/(encryption)/unlock'
+      path: '/unlock'
+      fullPath: '/unlock'
+      preLoaderRoute: typeof encryptionUnlockRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/(encryption)/setup': {
+      id: '/(encryption)/setup'
+      path: '/setup'
+      fullPath: '/setup'
+      preLoaderRoute: typeof encryptionSetupRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/(auth)/totp-verify': {
+      id: '/(auth)/totp-verify'
+      path: '/totp-verify'
+      fullPath: '/totp-verify'
+      preLoaderRoute: typeof authTotpVerifyRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/(auth)/login': {
+      id: '/(auth)/login'
+      path: '/login'
+      fullPath: '/login'
+      preLoaderRoute: typeof authLoginRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/_app/overview': {
+      id: '/_app/overview'
+      path: '/overview'
+      fullPath: '/overview'
+      preLoaderRoute: typeof AppOverviewRouteRouteImport
+      parentRoute: typeof AppRouteRoute
+    }
+    '/_app/issues': {
+      id: '/_app/issues'
+      path: '/issues'
+      fullPath: '/issues'
+      preLoaderRoute: typeof AppIssuesRouteRouteImport
+      parentRoute: typeof AppRouteRoute
+    }
+    '/_app/documents': {
+      id: '/_app/documents'
+      path: '/documents'
+      fullPath: '/documents'
+      preLoaderRoute: typeof AppDocumentsRouteRouteImport
+      parentRoute: typeof AppRouteRoute
     }
     '/_app/admin': {
       id: '/_app/admin'
       path: '/admin'
       fullPath: '/admin'
-      preLoaderRoute: typeof AppAdminRouteImport
-      parentRoute: typeof AppRoute
+      preLoaderRoute: typeof AppAdminRouteRouteImport
+      parentRoute: typeof AppRouteRoute
     }
-    '/_app/portal/': {
-      id: '/_app/portal/'
-      path: '/portal'
-      fullPath: '/portal/'
-      preLoaderRoute: typeof AppPortalIndexRouteImport
-      parentRoute: typeof AppRoute
+    '/_app/issues/': {
+      id: '/_app/issues/'
+      path: '/'
+      fullPath: '/issues/'
+      preLoaderRoute: typeof AppIssuesIndexRouteImport
+      parentRoute: typeof AppIssuesRouteRoute
     }
-    '/_app/portal/issues': {
-      id: '/_app/portal/issues'
-      path: '/portal/issues'
-      fullPath: '/portal/issues'
-      preLoaderRoute: typeof AppPortalIssuesRouteImport
-      parentRoute: typeof AppRoute
-    }
-    '/_app/portal/documents': {
-      id: '/_app/portal/documents'
-      path: '/portal/documents'
-      fullPath: '/portal/documents'
-      preLoaderRoute: typeof AppPortalDocumentsRouteImport
-      parentRoute: typeof AppRoute
+    '/_app/issues/$issueId': {
+      id: '/_app/issues/$issueId'
+      path: '/$issueId'
+      fullPath: '/issues/$issueId'
+      preLoaderRoute: typeof AppIssuesIssueIdRouteImport
+      parentRoute: typeof AppIssuesRouteRoute
     }
     '/_app/admin/users': {
       id: '/_app/admin/users'
       path: '/users'
       fullPath: '/admin/users'
       preLoaderRoute: typeof AppAdminUsersRouteImport
-      parentRoute: typeof AppAdminRoute
+      parentRoute: typeof AppAdminRouteRoute
     }
     '/_app/admin/settings': {
       id: '/_app/admin/settings'
       path: '/settings'
       fullPath: '/admin/settings'
       preLoaderRoute: typeof AppAdminSettingsRouteImport
-      parentRoute: typeof AppAdminRoute
+      parentRoute: typeof AppAdminRouteRoute
     }
     '/_app/admin/policies': {
       id: '/_app/admin/policies'
       path: '/policies'
       fullPath: '/admin/policies'
       preLoaderRoute: typeof AppAdminPoliciesRouteImport
-      parentRoute: typeof AppAdminRoute
+      parentRoute: typeof AppAdminRouteRoute
     }
     '/_app/admin/cron': {
       id: '/_app/admin/cron'
       path: '/cron'
       fullPath: '/admin/cron'
       preLoaderRoute: typeof AppAdminCronRouteImport
-      parentRoute: typeof AppAdminRoute
+      parentRoute: typeof AppAdminRouteRoute
     }
     '/_app/admin/audit': {
       id: '/_app/admin/audit'
       path: '/audit'
       fullPath: '/admin/audit'
       preLoaderRoute: typeof AppAdminAuditRouteImport
-      parentRoute: typeof AppAdminRoute
-    }
-    '/_app/portal/issues/': {
-      id: '/_app/portal/issues/'
-      path: '/'
-      fullPath: '/portal/issues/'
-      preLoaderRoute: typeof AppPortalIssuesIndexRouteImport
-      parentRoute: typeof AppPortalIssuesRoute
+      parentRoute: typeof AppAdminRouteRoute
     }
     '/_app/admin/users/': {
       id: '/_app/admin/users/'
@@ -435,13 +441,6 @@ declare module '@tanstack/react-router' {
       fullPath: '/admin/users/'
       preLoaderRoute: typeof AppAdminUsersIndexRouteImport
       parentRoute: typeof AppAdminUsersRoute
-    }
-    '/_app/portal/issues/$issueId': {
-      id: '/_app/portal/issues/$issueId'
-      path: '/$issueId'
-      fullPath: '/portal/issues/$issueId'
-      preLoaderRoute: typeof AppPortalIssuesIssueIdRouteImport
-      parentRoute: typeof AppPortalIssuesRoute
     }
     '/_app/admin/users/groups': {
       id: '/_app/admin/users/groups'
@@ -467,7 +466,7 @@ const AppAdminUsersRouteWithChildren = AppAdminUsersRoute._addFileChildren(
   AppAdminUsersRouteChildren,
 )
 
-interface AppAdminRouteChildren {
+interface AppAdminRouteRouteChildren {
   AppAdminAuditRoute: typeof AppAdminAuditRoute
   AppAdminCronRoute: typeof AppAdminCronRoute
   AppAdminPoliciesRoute: typeof AppAdminPoliciesRoute
@@ -475,7 +474,7 @@ interface AppAdminRouteChildren {
   AppAdminUsersRoute: typeof AppAdminUsersRouteWithChildren
 }
 
-const AppAdminRouteChildren: AppAdminRouteChildren = {
+const AppAdminRouteRouteChildren: AppAdminRouteRouteChildren = {
   AppAdminAuditRoute: AppAdminAuditRoute,
   AppAdminCronRoute: AppAdminCronRoute,
   AppAdminPoliciesRoute: AppAdminPoliciesRoute,
@@ -483,49 +482,52 @@ const AppAdminRouteChildren: AppAdminRouteChildren = {
   AppAdminUsersRoute: AppAdminUsersRouteWithChildren,
 }
 
-const AppAdminRouteWithChildren = AppAdminRoute._addFileChildren(
-  AppAdminRouteChildren,
+const AppAdminRouteRouteWithChildren = AppAdminRouteRoute._addFileChildren(
+  AppAdminRouteRouteChildren,
 )
 
-interface AppPortalIssuesRouteChildren {
-  AppPortalIssuesIssueIdRoute: typeof AppPortalIssuesIssueIdRoute
-  AppPortalIssuesIndexRoute: typeof AppPortalIssuesIndexRoute
+interface AppIssuesRouteRouteChildren {
+  AppIssuesIssueIdRoute: typeof AppIssuesIssueIdRoute
+  AppIssuesIndexRoute: typeof AppIssuesIndexRoute
 }
 
-const AppPortalIssuesRouteChildren: AppPortalIssuesRouteChildren = {
-  AppPortalIssuesIssueIdRoute: AppPortalIssuesIssueIdRoute,
-  AppPortalIssuesIndexRoute: AppPortalIssuesIndexRoute,
+const AppIssuesRouteRouteChildren: AppIssuesRouteRouteChildren = {
+  AppIssuesIssueIdRoute: AppIssuesIssueIdRoute,
+  AppIssuesIndexRoute: AppIssuesIndexRoute,
 }
 
-const AppPortalIssuesRouteWithChildren = AppPortalIssuesRoute._addFileChildren(
-  AppPortalIssuesRouteChildren,
+const AppIssuesRouteRouteWithChildren = AppIssuesRouteRoute._addFileChildren(
+  AppIssuesRouteRouteChildren,
 )
 
-interface AppRouteChildren {
-  AppAdminRoute: typeof AppAdminRouteWithChildren
-  AppPortalDocumentsRoute: typeof AppPortalDocumentsRoute
-  AppPortalIssuesRoute: typeof AppPortalIssuesRouteWithChildren
-  AppPortalIndexRoute: typeof AppPortalIndexRoute
+interface AppRouteRouteChildren {
+  AppAdminRouteRoute: typeof AppAdminRouteRouteWithChildren
+  AppDocumentsRouteRoute: typeof AppDocumentsRouteRoute
+  AppIssuesRouteRoute: typeof AppIssuesRouteRouteWithChildren
+  AppOverviewRouteRoute: typeof AppOverviewRouteRoute
+  AppIndexRoute: typeof AppIndexRoute
 }
 
-const AppRouteChildren: AppRouteChildren = {
-  AppAdminRoute: AppAdminRouteWithChildren,
-  AppPortalDocumentsRoute: AppPortalDocumentsRoute,
-  AppPortalIssuesRoute: AppPortalIssuesRouteWithChildren,
-  AppPortalIndexRoute: AppPortalIndexRoute,
+const AppRouteRouteChildren: AppRouteRouteChildren = {
+  AppAdminRouteRoute: AppAdminRouteRouteWithChildren,
+  AppDocumentsRouteRoute: AppDocumentsRouteRoute,
+  AppIssuesRouteRoute: AppIssuesRouteRouteWithChildren,
+  AppOverviewRouteRoute: AppOverviewRouteRoute,
+  AppIndexRoute: AppIndexRoute,
 }
 
-const AppRouteWithChildren = AppRoute._addFileChildren(AppRouteChildren)
+const AppRouteRouteWithChildren = AppRouteRoute._addFileChildren(
+  AppRouteRouteChildren,
+)
 
 const rootRouteChildren: RootRouteChildren = {
-  IndexRoute: IndexRoute,
-  AppRoute: AppRouteWithChildren,
-  DeniedRoute: DeniedRoute,
-  ErrorRoute: ErrorRoute,
-  LoginRoute: LoginRoute,
-  SetupRoute: SetupRoute,
-  TotpVerifyRoute: TotpVerifyRoute,
-  UnlockRoute: UnlockRoute,
+  AppRouteRoute: AppRouteRouteWithChildren,
+  authLoginRoute: authLoginRoute,
+  authTotpVerifyRoute: authTotpVerifyRoute,
+  encryptionSetupRoute: encryptionSetupRoute,
+  encryptionUnlockRoute: encryptionUnlockRoute,
+  errorDeniedRoute: errorDeniedRoute,
+  errorErrorRoute: errorErrorRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)

@@ -6,7 +6,7 @@ import { useTranslation } from "react-i18next";
 import { Card, CardDescription, CardHeader, CardTitle } from "@/shared/components/ui/card";
 import { useAuthStore } from "@/shared/stores/auth";
 
-export const Route = createLazyFileRoute("/_app/portal/")({
+export const Route = createLazyFileRoute("/_app/overview")({
   component: PortalPage,
 });
 
@@ -20,8 +20,8 @@ interface PortalTile {
 }
 
 const PORTAL_TILES: readonly PortalTile[] = [
-  { key: "myIssues", path: "/portal/issues", icon: CheckSquare },
-  { key: "documents", path: "/portal/documents", icon: FileText },
+  { key: "myIssues", path: "/issues", icon: CheckSquare },
+  { key: "documents", path: "/documents", icon: FileText },
 ];
 
 function PortalPage() {

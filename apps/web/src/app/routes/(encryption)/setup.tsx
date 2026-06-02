@@ -12,7 +12,7 @@ import { Textarea } from "@/shared/components/ui/textarea";
 import { APP_NAME } from "@/shared/lib/branding";
 import { http } from "@/shared/lib/http";
 
-export const Route = createFileRoute("/setup")({
+export const Route = createFileRoute("/(encryption)/setup")({
   staticData: { titleKey: "encryption:setup.title" },
   component: SetupPage,
 });
@@ -120,7 +120,7 @@ function SetupPage() {
           }
         }
         if (initialized) {
-          void navigate({ to: status === "locked" ? "/unlock" : "/portal" });
+          void navigate({ to: status === "locked" ? "/unlock" : "/" });
         }
         setChecking(false);
       })

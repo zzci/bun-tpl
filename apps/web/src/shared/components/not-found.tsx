@@ -27,7 +27,7 @@ export function NotFoundPage() {
           </CardHeader>
           <CardContent className="flex justify-center">
             <Link
-              to="/portal"
+              to="/overview"
               className="inline-flex h-8 items-center justify-center rounded-lg bg-primary px-3 text-sm font-medium text-primary-foreground hover:bg-primary/90"
             >
               {t("denied:backToPortal")}

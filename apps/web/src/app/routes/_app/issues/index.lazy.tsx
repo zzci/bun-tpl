@@ -58,7 +58,7 @@ import {
   statusVariants,
 } from "./-issue-panel";
 
-export const Route = createLazyFileRoute("/_app/portal/issues/")({
+export const Route = createLazyFileRoute("/_app/issues/")({
   component: IssuesListPage,
 });
 
@@ -171,7 +171,7 @@ function IssuesListPage() {
   };
 
   const openFullscreen = (id: string) => {
-    void navigate({ to: "/portal/issues/$issueId", params: { issueId: id } });
+    void navigate({ to: "/issues/$issueId", params: { issueId: id } });
   };
 
   const handleDrawerResizeStart = useCallback((event: PointerEvent<HTMLDivElement>) => {

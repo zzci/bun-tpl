@@ -10,7 +10,7 @@ function AdminLayout() {
   const user = useAuthStore(s => s.user);
 
   if (!user || user.role !== "admin") {
-    return <Navigate to="/portal" />;
+    return <Navigate to="/overview" />;
   }
 
   return <Outlet />;

@@ -106,7 +106,7 @@ function AppLayout() {
             a thumb naturally lands. */}
         <header className="flex h-12 shrink-0 items-center justify-between border-b border-border/60 px-3 md:hidden">
           <Link
-            to="/portal"
+            to="/overview"
             className="flex items-center hover:opacity-90 transition-opacity"
             aria-label={t("nav.home")}
           >

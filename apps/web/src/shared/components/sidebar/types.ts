@@ -1,6 +1,6 @@
 import type { LucideIcon } from "lucide-react";
 
-export type NavArea = "portal" | "admin";
+export type NavArea = "main" | "admin";
 
 export interface NavItem {
   readonly area: NavArea;

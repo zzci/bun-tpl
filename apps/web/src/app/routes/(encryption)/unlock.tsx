@@ -71,7 +71,7 @@ function unlockBundleErrorMessage(err: unknown, t: (key: string) => string): str
   return err instanceof Error ? err.message : t("encryption:unlock.invalidKey");
 }
 
-export const Route = createFileRoute("/unlock")({
+export const Route = createFileRoute("/(encryption)/unlock")({
   staticData: { titleKey: "encryption:unlock.title" },
   component: UnlockPage,
 });
@@ -128,7 +128,7 @@ function UnlockPage() {
       }
       if (!status.data.locked) {
         clearCachedChallenge();
-        void navigate({ to: "/portal" });
+        void navigate({ to: "/overview" });
         return;
       }
 

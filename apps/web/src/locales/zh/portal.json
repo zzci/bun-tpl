@@ -1,6 +1,6 @@
 {
   "page": {
-    "title": "门户",
+    "title": "概览",
     "description": "欢迎回到工作台。"
   },
   "welcome": "欢迎回来，{{name}}",

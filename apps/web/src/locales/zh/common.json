@@ -43,7 +43,7 @@
     }
   },
   "nav": {
-    "portal": "门户",
+    "overview": "概览",
     "users": "用户",
     "policies": "策略",
     "myIssues": "我的事项",

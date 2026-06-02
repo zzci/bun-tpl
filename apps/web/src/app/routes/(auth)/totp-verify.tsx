@@ -11,7 +11,7 @@ import { BASE_PATH, http, HttpError } from "@/shared/lib/http";
 
 const RE_NON_DIGIT = /\D/g;
 
-export const Route = createFileRoute("/totp-verify")({
+export const Route = createFileRoute("/(auth)/totp-verify")({
   staticData: { titleKey: "totp:loginTitle" },
   component: TotpVerifyPage,
 });
@@ -34,7 +34,7 @@ function TotpVerifyPage() {
         "/account/auth/totp/verify",
         { method: "POST", body: JSON.stringify({ code }) },
       );
-      window.location.href = body.data?.redirect ?? `${BASE_PATH}/portal`;
+      window.location.href = body.data?.redirect ?? `${BASE_PATH}/overview`;
     }
     catch (err) {
       if (err instanceof HttpError && (err.code === "EXPIRED_CHALLENGE" || err.code === "NO_PENDING_TOTP")) {

@@ -23,7 +23,7 @@ import { CreateForm, EmptyState } from "./-documents-create";
 import { DocumentDetail } from "./-documents-detail";
 import { DocumentsSidebar } from "./-documents-sidebar";
 
-export const Route = createLazyFileRoute("/_app/portal/documents")({
+export const Route = createLazyFileRoute("/_app/documents")({
   component: DocumentsPage,
 });
 

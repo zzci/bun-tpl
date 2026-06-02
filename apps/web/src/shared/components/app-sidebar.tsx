@@ -53,9 +53,6 @@ function isNavActive(
   pathname: string,
 ): boolean {
   const prefix = item.matchPrefix ?? item.path;
-  if (prefix === "/portal" || prefix === "/") {
-    return pathname === prefix || pathname === `${prefix}/`;
-  }
   return pathname === prefix || pathname.startsWith(`${prefix}/`);
 }
 
@@ -150,7 +147,7 @@ export function AppSidebar() {
   const currentPath = routerState.location.pathname;
   const [settingsOpen, setSettingsOpen] = useState(false);
 
-  const portalNav = getNavItems("portal");
+  const overviewNav = getNavItems("main");
   const adminNav = getNavItems("admin");
 
   return (
@@ -175,7 +172,7 @@ export function AppSidebar() {
           {/* Expanded layout (hidden when collapsed). */}
           <div className="flex w-full items-center gap-2 group-data-[collapsible=icon]:hidden">
             <Link
-              to="/portal"
+              to="/overview"
               className="flex min-w-0 items-center gap-2 rounded-lg outline-none transition-opacity hover:opacity-90 focus-visible:ring-2 focus-visible:ring-sidebar-ring"
               aria-label={t("nav.home")}
             >
@@ -197,10 +194,10 @@ export function AppSidebar() {
 
         {/* Nav */}
         <SidebarContent>
-          {/* Portal nav */}
+          {/* Main nav */}
           <SidebarGroup>
             <SidebarMenu>
-              {portalNav.map(item => (
+              {overviewNav.map(item => (
                 <SidebarMenuItem key={item.key}>
                   <SidebarMenuButton
                     isActive={isNavActive(item, currentPath)}
@@ -253,11 +250,11 @@ export function AppSidebar() {
                         {getInitials(user.name)}
                       </AvatarFallback>
                     </Avatar>
-                    {/* Name + email stack. Hidden in icon mode along
-                        with the chevron — only the avatar remains. */}
+                    {/* Name only. Hidden in icon mode along with the
+                        chevron — only the avatar remains. Email lives in
+                        the dropdown menu below. */}
                     <div className="grid min-w-0 flex-1 text-left leading-tight group-data-[collapsible=icon]:hidden">
                       <span className="truncate text-sm font-medium">{user.name}</span>
-                      <span className="truncate text-xs text-muted-foreground">{user.email}</span>
                     </div>
                     <ChevronUp className="ml-auto size-4 text-sidebar-foreground/70 group-data-[collapsible=icon]:hidden" />
                   </DropdownMenuTrigger>

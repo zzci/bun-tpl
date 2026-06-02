@@ -31,7 +31,7 @@ function parseCode(raw: unknown): ErrorCode {
   return (KNOWN_ERROR_CODES as readonly string[]).includes(raw) ? (raw as KnownErrorCode) : "unknown";
 }
 
-export const Route = createFileRoute("/error")({
+export const Route = createFileRoute("/(error)/error")({
   staticData: { titleKey: "errors:title" },
   component: ErrorPage,
   validateSearch: (search: Record<string, unknown>): ErrorSearchParams => ({
@@ -83,7 +83,7 @@ function ErrorPage() {
             )}
             <div className="flex justify-center gap-2">
               <Link
-                to="/"
+                to="/overview"
                 className="inline-flex h-9 items-center justify-center rounded-md border border-input bg-background px-4 text-sm font-medium hover:bg-accent hover:text-accent-foreground"
               >
                 {t("home")}
