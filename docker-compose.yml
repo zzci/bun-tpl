@@ -9,8 +9,8 @@
 #     or your release CI).
 #
 # `${APP_NAME}` is substituted from a `.env` in this directory (defaulting to
-# `app`). Edit the Host rule, entrypoint and certresolver below to match your
-# Traefik static configuration.
+# `app`). Routing is left to your Traefik configuration (file/dynamic
+# provider); add container labels here if you prefer label-based routing.
 services:
   app:
     container_name: ${APP_NAME:-app}
@@ -23,14 +23,6 @@ services:
       - ./data-docker:/app/data
     networks:
       - traefik
-    labels:
-      - "traefik.enable=true"
-      - "traefik.docker.network=traefik"
-      - "traefik.http.routers.${APP_NAME:-app}.rule=Host(`${APP_NAME:-app}.example.com`)"
-      - "traefik.http.routers.${APP_NAME:-app}.entrypoints=websecure"
-      - "traefik.http.routers.${APP_NAME:-app}.tls=true"
-      - "traefik.http.routers.${APP_NAME:-app}.tls.certresolver=le"
-      - "traefik.http.services.${APP_NAME:-app}.loadbalancer.server.port=3000"
 
 networks:
   traefik:
