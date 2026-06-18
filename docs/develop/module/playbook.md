@@ -6,6 +6,7 @@ Replace `<name>` with your module's kebab-case singular name (e.g. `ticket`).
 
 1. **Create the backend four-file set** under `apps/api/src/modules/<name>/`: `schema.ts`, `<name>.service.ts`, `<name>.routes.ts`, `index.ts`.
    - Tables live in `schema.ts`; the service consumes `c.get("db")`; routes wrap `authRequired`; `index.ts` only re-exports.
+   - Every route must declare `describeRoute(...)` and validate input with `validator(...)` from `@/shared/lib/openapi` so it lands in the OpenAPI spec. Why: [openapi-standard.md](openapi-standard.md).
    - Why: [§2.1 File layout](standards.md#21-file-layout), [§2.6 Schema sharding](standards.md#26-schema-sharding-mandatory).
 
 2. **Re-export the schema** from `apps/api/src/db/schema.ts` (one line, alphabetical):

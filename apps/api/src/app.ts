@@ -11,6 +11,7 @@ import { loadConfig } from "./config";
 import { logDefaultAdmins } from "./modules/account/auth/auth.service";
 import { startAuditRetentionSweep } from "./modules/audit";
 import { initCronActions, startCron } from "./modules/cron";
+import { docsCspRelax, mountDocs } from "./modules/docs";
 import { bootstrapEncryption } from "./modules/encryption";
 import { EncryptionState as EncryptionStateCtor } from "./modules/encryption/state";
 import { initFileModule, startFileGcSweep } from "./modules/file";
@@ -158,6 +159,14 @@ export async function buildFullApp({ config, db, logger, encryption }: AppDeps) 
     await startCron({ db, logger, config });
   }
 
+  // OpenAPI spec (/openapi.json) + Scalar UI (/docs). Mounted BEFORE the
+  // route modules: Hono middleware only applies to routes registered after
+  // it, so mounting here keeps docs outside every module's `use("*")` auth /
+  // unlock guards (which would otherwise gate them). `openAPIRouteHandler`
+  // walks `api`'s route table lazily at request time, so routes registered
+  // below are still included in the spec. See modules/docs.
+  mountDocs(api, config);
+
   api.route("/", publicRoutes());
   api.route("/", protectedRoutes());
 
@@ -202,6 +211,11 @@ export function buildLockedApp(config: Config, logger: Logger, encryption: Encry
 function buildOuterApp(api: Hono<AppEnv>, config: Config) {
   const app = new Hono<AppEnv>();
   const base = config.BASE_PATH;
+
+  // Scoped CSP relaxation for the Scalar docs page. Registered before
+  // `secureHeaders` so its post-`next()` override wins over the strict global
+  // policy (which would otherwise block Scalar's CDN bundle). See modules/docs.
+  app.use(`${base}/api/docs`, docsCspRelax);
 
   // Security headers for every response (API JSON + static SPA HTML/JS/CSS).
   // SPA bundles are hashed under BASE_PATH; styles need 'unsafe-inline' for

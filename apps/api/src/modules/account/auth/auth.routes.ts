@@ -5,6 +5,7 @@ import type { AppEnv } from "@/shared/lib/types";
 import { Buffer } from "node:buffer";
 import { Hono } from "hono";
 import { deleteCookie, getCookie, setCookie } from "hono/cookie";
+import { z } from "zod";
 import { clearSessionCookie, cookiePath, readSessionId, writeSessionCookie } from "@/modules/account/auth/session-cookie";
 import {
   consumeTotpChallenge,
@@ -15,6 +16,7 @@ import {
 import { audit } from "@/modules/audit/audit.service";
 import { deriveOrigin, getAuthConfig, getOAuthConfig, getOidcLogoutUrl, getSingleUserConfig, isOAuthConfigured, isSingleUserMode } from "@/shared/lib/app-config";
 import { getClientIp } from "@/shared/lib/client-ip";
+import { describeRoute, errors, jsonOk, TAGS } from "@/shared/lib/openapi";
 import {
   consumePkceEntry,
   createPkceChallenge,
@@ -244,282 +246,328 @@ export function authRoutes() {
   const router = new Hono<AppEnv>();
 
   // GET /account/auth/login — initiate OAuth flow (with optional PKCE)
-  router.get("/account/auth/login", async (c) => {
-    {
-      const retryAfter = checkAuthRateLimit(rateLimitKey(c));
-      if (retryAfter > 0) {
-        c.header("Retry-After", String(retryAfter));
-        return c.json({ success: false, error: { code: "RATE_LIMITED", message: "Too many requests" } }, 429);
+  router.get(
+    "/account/auth/login",
+    describeRoute({
+      tags: [TAGS.Account],
+      summary: "Initiate login",
+      description: "Starts the OAuth/OIDC authorization flow and redirects to the IdP. Redirects to the SPA error page in single-user mode or when OAuth is not configured.",
+      responses: {
+        302: { description: "Redirect to the IdP authorize endpoint, or to the SPA error page on misconfiguration" },
+        ...errors(429),
+      },
+    }),
+    async (c) => {
+      {
+        const retryAfter = checkAuthRateLimit(rateLimitKey(c));
+        if (retryAfter > 0) {
+          c.header("Retry-After", String(retryAfter));
+          return c.json({ success: false, error: { code: "RATE_LIMITED", message: "Too many requests" } }, 429);
+        }
       }
-    }
-    const config = c.get("config");
-    const base = config.BASE_PATH;
-    // Single-user mode short-circuits the OAuth dance. The SPA renders the
-    // local username/password form instead, so an OAuth-initiated login is
-    // an explicit operator misconfiguration — surface it loudly.
-    if (isSingleUserMode(config)) {
-      return c.redirect(buildLoginErrorUrl(base, "single_user_mode_active"), 302);
-    }
-    // OAuth is a hard requirement: refuse to start the dance when any of
-    // OAUTH_CLIENT_ID / OAUTH_*_URL is missing, instead of letting
-    // getOAuthConfig throw into Hono's default 500 handler. Bouncing back
-    // to /login with a banner-friendly error code keeps the user in the
-    // SPA flow.
-    if (!isOAuthConfigured(config)) {
-      return c.redirect(buildLoginErrorUrl(base, "oauth_not_configured"), 302);
-    }
-    const oauth = getOAuthConfig(config);
-    const callbackUrl = `${deriveOrigin(c.req.raw, config)}${base}/api/account/auth/callback`;
-    const redirectUri = sanitizeRedirect(c.req.query("redirect") ?? `${base}/portal`, base);
-
-    const { state, codeChallenge } = await createPkceChallenge(c.get("db"), redirectUri);
-    const authorizeUrl = buildAuthorizeUrl({
-      oauth,
-      appConfig: config,
-      callbackUrl,
-      state,
-      codeChallenge: oauth.pkce ? await codeChallenge : undefined,
-    });
-
-    // Bind `state` to this browser via an httpOnly cookie. /callback rejects
-    // any callback whose query state does not match the cookie — closes the
-    // session-fixation hole that PKCE alone leaves open.
-    setCookie(c, oauthStateCookieName(config.NODE_ENV), state, {
-      httpOnly: true,
-      secure: config.NODE_ENV === "production",
-      sameSite: "Lax",
-      path: cookiePath(base),
-      maxAge: OAUTH_STATE_TTL_SECONDS,
-    });
-
-    return c.redirect(authorizeUrl, 302);
-  });
-
-  // GET /account/auth/callback — OAuth callback
-  router.get("/account/auth/callback", async (c) => {
-    {
-      const retryAfter = checkAuthRateLimit(rateLimitKey(c));
-      if (retryAfter > 0) {
-        c.header("Retry-After", String(retryAfter));
-        return c.json({ success: false, error: { code: "RATE_LIMITED", message: "Too many requests" } }, 429);
+      const config = c.get("config");
+      const base = config.BASE_PATH;
+      // Single-user mode short-circuits the OAuth dance. The SPA renders the
+      // local username/password form instead, so an OAuth-initiated login is
+      // an explicit operator misconfiguration — surface it loudly.
+      if (isSingleUserMode(config)) {
+        return c.redirect(buildLoginErrorUrl(base, "single_user_mode_active"), 302);
       }
-    }
-    const db = c.get("db");
-    const config = c.get("config");
-    const logger = c.get("logger");
-    const base = config.BASE_PATH;
-    // Same guard as /login: if the OAuth config was wiped between the user
-    // bouncing out to the IdP and bouncing back, surface a real error
-    // instead of letting getOAuthConfig throw into a 500.
-    if (!isOAuthConfigured(config)) {
-      return c.redirect(buildLoginErrorUrl(base, "oauth_not_configured"), 302);
-    }
-    const oauth = getOAuthConfig(config);
-    const authCfg = await getAuthConfig(db, config);
+      // OAuth is a hard requirement: refuse to start the dance when any of
+      // OAUTH_CLIENT_ID / OAUTH_*_URL is missing, instead of letting
+      // getOAuthConfig throw into Hono's default 500 handler. Bouncing back
+      // to /login with a banner-friendly error code keeps the user in the
+      // SPA flow.
+      if (!isOAuthConfigured(config)) {
+        return c.redirect(buildLoginErrorUrl(base, "oauth_not_configured"), 302);
+      }
+      const oauth = getOAuthConfig(config);
+      const callbackUrl = `${deriveOrigin(c.req.raw, config)}${base}/api/account/auth/callback`;
+      const redirectUri = sanitizeRedirect(c.req.query("redirect") ?? `${base}/portal`, base);
 
-    const code = c.req.query("code");
-    const state = c.req.query("state");
-    const error = c.req.query("error");
-
-    if (error) {
-      const rawDesc = c.req.query("error_description") ?? error;
-      const desc = rawDesc.replace(RE_CONTROL_CHARS, "").slice(0, 200);
-      logger.warn({ error, desc }, "OAuth authorization error");
-      await audit(db, c.get("logger"), {
-        actorId: "system",
-        actorName: "system",
-        action: "auth.login_failed",
-        resourceType: "auth",
-        resourceId: "",
-        resourceName: "oauth",
-        detail: { error, description: desc },
-        ip: getClientIp(c),
-        userAgent: c.req.header("user-agent") ?? "unknown",
-        result: "failure",
-      });
-      return c.redirect(buildLoginErrorUrl(base, "oidc_error", desc), 302);
-    }
-
-    if (!code || !state) {
-      return c.redirect(buildLoginErrorUrl(base, "oauth_state_invalid"), 302);
-    }
-
-    // `state` must match the cookie planted at /login. A reload after the
-    // browser closed (or a CSRF-style cross-browser callback delivery) loses
-    // the cookie — reject explicitly so the user re-initiates login.
-    const cookieName = oauthStateCookieName(config.NODE_ENV);
-    const cookieState = getCookie(c, cookieName);
-    deleteCookie(c, cookieName, { path: "/" });
-    if (!cookieState || cookieState !== state) {
-      return c.redirect(buildLoginErrorUrl(base, "oauth_state_invalid"), 302);
-    }
-
-    const pkceEntry = await consumePkceEntry(c.get("db"), state);
-    if (!pkceEntry) {
-      return c.redirect(buildLoginErrorUrl(base, "oauth_state_invalid"), 302);
-    }
-
-    const origin = deriveOrigin(c.req.raw, config);
-    const callbackUrl = new URL(`${origin}${base}/api/account/auth/callback`);
-    // Mirror the inbound query string so openid-client can validate the
-    // full set of response parameters in a single pass.
-    for (const [k, v] of new URL(c.req.url).searchParams)
-      callbackUrl.searchParams.append(k, v);
-    let tokens;
-    try {
-      tokens = await exchangeCodeForTokens({
+      const { state, codeChallenge } = await createPkceChallenge(c.get("db"), redirectUri);
+      const authorizeUrl = buildAuthorizeUrl({
         oauth,
         appConfig: config,
         callbackUrl,
-        expectedState: state,
-        codeVerifier: oauth.pkce ? pkceEntry.codeVerifier : undefined,
+        state,
+        codeChallenge: oauth.pkce ? await codeChallenge : undefined,
       });
-    }
-    catch (err) {
-      logger.error({
-        err: err instanceof Error ? err.message : String(err),
-        code: (err as { code?: unknown }).code,
-      }, "OAuth token exchange failed");
-      return c.redirect(buildLoginErrorUrl(base, "oidc_error", "Token exchange failed"), 302);
-    }
-    // Resolve the expected `sub` BEFORE the userinfo call so a present-
-    // but-unparseable id_token fails closed as an auth error instead of
-    // silently downgrading to `skipSubjectCheck`. A genuinely absent
-    // id_token (pure OAuth2 IdP) yields `null` → skip is acceptable.
-    let idTokenSub: string | null;
-    try {
-      idTokenSub = readIdTokenSub(tokens.id_token);
-    }
-    catch (err) {
-      logger.error({ err: err instanceof Error ? err.message : String(err) }, "OAuth id_token rejected");
-      return c.redirect(buildLoginErrorUrl(base, "oidc_error", "Invalid id_token"), 302);
-    }
-    let userInfo;
-    try {
+
+      // Bind `state` to this browser via an httpOnly cookie. /callback rejects
+      // any callback whose query state does not match the cookie — closes the
+      // session-fixation hole that PKCE alone leaves open.
+      setCookie(c, oauthStateCookieName(config.NODE_ENV), state, {
+        httpOnly: true,
+        secure: config.NODE_ENV === "production",
+        sameSite: "Lax",
+        path: cookiePath(base),
+        maxAge: OAUTH_STATE_TTL_SECONDS,
+      });
+
+      return c.redirect(authorizeUrl, 302);
+    },
+  );
+
+  // GET /account/auth/callback — OAuth callback
+  router.get(
+    "/account/auth/callback",
+    describeRoute({
+      tags: [TAGS.Account],
+      summary: "OAuth callback",
+      description: "Handles the IdP redirect: validates state, exchanges the code for tokens, then redirects to the original target (or to TOTP verification / the SPA error page).",
+      responses: {
+        302: { description: "Redirect to the post-login target, the TOTP verification page, or the SPA error page" },
+        ...errors(429),
+      },
+    }),
+    async (c) => {
+      {
+        const retryAfter = checkAuthRateLimit(rateLimitKey(c));
+        if (retryAfter > 0) {
+          c.header("Retry-After", String(retryAfter));
+          return c.json({ success: false, error: { code: "RATE_LIMITED", message: "Too many requests" } }, 429);
+        }
+      }
+      const db = c.get("db");
+      const config = c.get("config");
+      const logger = c.get("logger");
+      const base = config.BASE_PATH;
+      // Same guard as /login: if the OAuth config was wiped between the user
+      // bouncing out to the IdP and bouncing back, surface a real error
+      // instead of letting getOAuthConfig throw into a 500.
+      if (!isOAuthConfigured(config)) {
+        return c.redirect(buildLoginErrorUrl(base, "oauth_not_configured"), 302);
+      }
+      const oauth = getOAuthConfig(config);
+      const authCfg = await getAuthConfig(db, config);
+
+      const code = c.req.query("code");
+      const state = c.req.query("state");
+      const error = c.req.query("error");
+
+      if (error) {
+        const rawDesc = c.req.query("error_description") ?? error;
+        const desc = rawDesc.replace(RE_CONTROL_CHARS, "").slice(0, 200);
+        logger.warn({ error, desc }, "OAuth authorization error");
+        await audit(db, c.get("logger"), {
+          actorId: "system",
+          actorName: "system",
+          action: "auth.login_failed",
+          resourceType: "auth",
+          resourceId: "",
+          resourceName: "oauth",
+          detail: { error, description: desc },
+          ip: getClientIp(c),
+          userAgent: c.req.header("user-agent") ?? "unknown",
+          result: "failure",
+        });
+        return c.redirect(buildLoginErrorUrl(base, "oidc_error", desc), 302);
+      }
+
+      if (!code || !state) {
+        return c.redirect(buildLoginErrorUrl(base, "oauth_state_invalid"), 302);
+      }
+
+      // `state` must match the cookie planted at /login. A reload after the
+      // browser closed (or a CSRF-style cross-browser callback delivery) loses
+      // the cookie — reject explicitly so the user re-initiates login.
+      const cookieName = oauthStateCookieName(config.NODE_ENV);
+      const cookieState = getCookie(c, cookieName);
+      deleteCookie(c, cookieName, { path: "/" });
+      if (!cookieState || cookieState !== state) {
+        return c.redirect(buildLoginErrorUrl(base, "oauth_state_invalid"), 302);
+      }
+
+      const pkceEntry = await consumePkceEntry(c.get("db"), state);
+      if (!pkceEntry) {
+        return c.redirect(buildLoginErrorUrl(base, "oauth_state_invalid"), 302);
+      }
+
+      const origin = deriveOrigin(c.req.raw, config);
+      const callbackUrl = new URL(`${origin}${base}/api/account/auth/callback`);
+      // Mirror the inbound query string so openid-client can validate the
+      // full set of response parameters in a single pass.
+      for (const [k, v] of new URL(c.req.url).searchParams)
+        callbackUrl.searchParams.append(k, v);
+      let tokens;
+      try {
+        tokens = await exchangeCodeForTokens({
+          oauth,
+          appConfig: config,
+          callbackUrl,
+          expectedState: state,
+          codeVerifier: oauth.pkce ? pkceEntry.codeVerifier : undefined,
+        });
+      }
+      catch (err) {
+        logger.error({
+          err: err instanceof Error ? err.message : String(err),
+          code: (err as { code?: unknown }).code,
+        }, "OAuth token exchange failed");
+        return c.redirect(buildLoginErrorUrl(base, "oidc_error", "Token exchange failed"), 302);
+      }
+      // Resolve the expected `sub` BEFORE the userinfo call so a present-
+      // but-unparseable id_token fails closed as an auth error instead of
+      // silently downgrading to `skipSubjectCheck`. A genuinely absent
+      // id_token (pure OAuth2 IdP) yields `null` → skip is acceptable.
+      let idTokenSub: string | null;
+      try {
+        idTokenSub = readIdTokenSub(tokens.id_token);
+      }
+      catch (err) {
+        logger.error({ err: err instanceof Error ? err.message : String(err) }, "OAuth id_token rejected");
+        return c.redirect(buildLoginErrorUrl(base, "oidc_error", "Invalid id_token"), 302);
+      }
+      let userInfo;
+      try {
       // expectedSub === "" tells fetchUserInfo to skipSubjectCheck — only
       // reached when the IdP sent no id_token at all (pure OAuth2).
-      userInfo = await fetchUserInfo({
-        oauth,
-        appConfig: config,
-        accessToken: tokens.access_token,
-        expectedSub: idTokenSub ?? "",
-      });
-    }
-    catch (err) {
-      logger.error({ err: err instanceof Error ? err.message : String(err) }, "OAuth userinfo fetch failed");
-      return c.redirect(buildLoginErrorUrl(base, "oidc_error", "Userinfo fetch failed"), 302);
-    }
-    const user = await upsertUser(db, userInfo, authCfg, logger);
+        userInfo = await fetchUserInfo({
+          oauth,
+          appConfig: config,
+          accessToken: tokens.access_token,
+          expectedSub: idTokenSub ?? "",
+        });
+      }
+      catch (err) {
+        logger.error({ err: err instanceof Error ? err.message : String(err) }, "OAuth userinfo fetch failed");
+        return c.redirect(buildLoginErrorUrl(base, "oidc_error", "Userinfo fetch failed"), 302);
+      }
+      const user = await upsertUser(db, userInfo, authCfg, logger);
 
-    if (user.status === "disabled") {
-      logger.warn({ username: user.username }, "login denied: user is disabled");
-      return c.redirect(buildLoginErrorUrl(base, "user_disabled"), 302);
-    }
+      if (user.status === "disabled") {
+        logger.warn({ username: user.username }, "login denied: user is disabled");
+        return c.redirect(buildLoginErrorUrl(base, "user_disabled"), 302);
+      }
 
-    // Check if user has TOTP enabled — if so, defer session creation
-    const totpEnabled = await hasVerifiedTotp(db, user.id);
-    if (totpEnabled) {
-      const challengeId = await createTotpChallenge(
+      // Check if user has TOTP enabled — if so, defer session creation
+      const totpEnabled = await hasVerifiedTotp(db, user.id);
+      if (totpEnabled) {
+        const challengeId = await createTotpChallenge(
+          db,
+          user.id,
+          tokens.access_token,
+          tokens.refresh_token,
+          tokens.expires_in,
+          pkceEntry.redirectUri,
+        );
+        setCookie(c, totpPendingCookieName(config.NODE_ENV), challengeId, {
+          httpOnly: true,
+          secure: config.NODE_ENV === "production",
+          sameSite: "Lax",
+          path: cookiePath(base),
+          maxAge: 300,
+        });
+        return c.redirect(`${base}/totp-verify`, 302);
+      }
+
+      const sessionId = await createSession(
         db,
         user.id,
         tokens.access_token,
         tokens.refresh_token,
         tokens.expires_in,
-        pkceEntry.redirectUri,
       );
-      setCookie(c, totpPendingCookieName(config.NODE_ENV), challengeId, {
-        httpOnly: true,
-        secure: config.NODE_ENV === "production",
-        sameSite: "Lax",
-        path: cookiePath(base),
-        maxAge: 300,
-      });
-      return c.redirect(`${base}/totp-verify`, 302);
-    }
 
-    const sessionId = await createSession(
-      db,
-      user.id,
-      tokens.access_token,
-      tokens.refresh_token,
-      tokens.expires_in,
-    );
+      writeSessionCookie(c, config.NODE_ENV, config.BASE_PATH, sessionId, authCfg.sessionMaxAge);
 
-    writeSessionCookie(c, config.NODE_ENV, config.BASE_PATH, sessionId, authCfg.sessionMaxAge);
-
-    await audit(db, c.get("logger"), {
-      actorId: user.id,
-      actorName: user.name,
-      action: "auth.login",
-      resourceType: "user",
-      resourceId: user.id,
-      resourceName: user.username,
-      ip: getClientIp(c),
-      userAgent: c.req.header("user-agent") ?? "unknown",
-      result: "success",
-    });
-
-    return c.redirect(sanitizeRedirect(pkceEntry.redirectUri, base), 302);
-  });
-
-  // POST /account/auth/logout — destroy session
-  router.post("/account/auth/logout", async (c) => {
-    const db = c.get("db");
-    const config = c.get("config");
-    const sessionId = readSessionId(c);
-
-    let logoutUser: { id: string; name: string; username: string } | undefined;
-    if (sessionId) {
-      const result = await getSessionWithUser(db, sessionId);
-      if (result) {
-        logoutUser = result.user;
-        // Best-effort OAuth token revocation. Sessions minted by the
-        // single-user flow carry the SINGLE_USER_ACCESS_TOKEN sentinel,
-        // not a real IdP bearer — skip the revocation call entirely in
-        // that case, both to avoid noise at the IdP and to keep the
-        // sentinel value out of any audit / metrics surface the
-        // openid-client library emits. openid-client picks the
-        // discovered revocation_endpoint (with RFC 7009 path-replacement
-        // fallback) so we don't have to guess the URL.
-        if (!isSingleUserSession(result.session.accessToken)) {
-          try {
-            const oauth = getOAuthConfig(config);
-            await revokeToken({ oauth, appConfig: config, token: result.session.accessToken, hint: "access_token" });
-            if (result.session.refreshToken) {
-              await revokeToken({ oauth, appConfig: config, token: result.session.refreshToken, hint: "refresh_token" });
-            }
-          }
-          catch { /* non-critical */ }
-        }
-      }
-      await deleteSession(db, sessionId);
-    }
-
-    clearSessionCookie(c, config.NODE_ENV, config.BASE_PATH);
-
-    if (logoutUser) {
       await audit(db, c.get("logger"), {
-        actorId: logoutUser.id,
-        actorName: logoutUser.name,
-        action: "auth.logout",
+        actorId: user.id,
+        actorName: user.name,
+        action: "auth.login",
         resourceType: "user",
-        resourceId: logoutUser.id,
-        resourceName: logoutUser.username,
+        resourceId: user.id,
+        resourceName: user.username,
         ip: getClientIp(c),
         userAgent: c.req.header("user-agent") ?? "unknown",
         result: "success",
       });
-    }
 
-    return c.json({ success: true, data: null });
-  });
+      return c.redirect(sanitizeRedirect(pkceEntry.redirectUri, base), 302);
+    },
+  );
+
+  // POST /account/auth/logout — destroy session
+  router.post(
+    "/account/auth/logout",
+    describeRoute({
+      tags: [TAGS.Account],
+      summary: "Log out",
+      description: "Destroys the current session (if any), best-effort revokes IdP tokens, and clears the session cookie.",
+      responses: {
+        ...jsonOk(z.null(), "Logged out"),
+      },
+    }),
+    async (c) => {
+      const db = c.get("db");
+      const config = c.get("config");
+      const sessionId = readSessionId(c);
+
+      let logoutUser: { id: string; name: string; username: string } | undefined;
+      if (sessionId) {
+        const result = await getSessionWithUser(db, sessionId);
+        if (result) {
+          logoutUser = result.user;
+          // Best-effort OAuth token revocation. Sessions minted by the
+          // single-user flow carry the SINGLE_USER_ACCESS_TOKEN sentinel,
+          // not a real IdP bearer — skip the revocation call entirely in
+          // that case, both to avoid noise at the IdP and to keep the
+          // sentinel value out of any audit / metrics surface the
+          // openid-client library emits. openid-client picks the
+          // discovered revocation_endpoint (with RFC 7009 path-replacement
+          // fallback) so we don't have to guess the URL.
+          if (!isSingleUserSession(result.session.accessToken)) {
+            try {
+              const oauth = getOAuthConfig(config);
+              await revokeToken({ oauth, appConfig: config, token: result.session.accessToken, hint: "access_token" });
+              if (result.session.refreshToken) {
+                await revokeToken({ oauth, appConfig: config, token: result.session.refreshToken, hint: "refresh_token" });
+              }
+            }
+            catch { /* non-critical */ }
+          }
+        }
+        await deleteSession(db, sessionId);
+      }
+
+      clearSessionCookie(c, config.NODE_ENV, config.BASE_PATH);
+
+      if (logoutUser) {
+        await audit(db, c.get("logger"), {
+          actorId: logoutUser.id,
+          actorName: logoutUser.name,
+          action: "auth.logout",
+          resourceType: "user",
+          resourceId: logoutUser.id,
+          resourceName: logoutUser.username,
+          ip: getClientIp(c),
+          userAgent: c.req.header("user-agent") ?? "unknown",
+          result: "success",
+        });
+      }
+
+      return c.json({ success: true, data: null });
+    },
+  );
 
   // GET /account/auth/logout-url — public, returns OIDC logout URL for account switching
-  router.get("/account/auth/logout-url", async (c) => {
-    const config = c.get("config");
-    const url = getOidcLogoutUrl(config);
-    return c.json({ success: true, data: { url } });
-  });
+  router.get(
+    "/account/auth/logout-url",
+    describeRoute({
+      tags: [TAGS.Account],
+      summary: "OIDC logout URL",
+      description: "Public. Returns the IdP end-session URL used for account switching (null when not configured).",
+      responses: {
+        ...jsonOk(z.object({ url: z.string().nullable() }), "Logout URL"),
+      },
+    }),
+    async (c) => {
+      const config = c.get("config");
+      const url = getOidcLogoutUrl(config);
+      return c.json({ success: true, data: { url } });
+    },
+  );
 
   // GET /account/auth/mode — public, surfaces which login UI to render
   // GET /account/auth/mode — anonymous; tells the SPA which login form
@@ -534,252 +582,287 @@ export function authRoutes() {
   // Brute-force exposure on the single-user surface is neutralised by
   // the per-username lockout in `/account/auth/login-local` — the
   // mode-leak is no longer an actionable triage signal for an attacker.
-  router.get("/account/auth/mode", (c) => {
-    const config = c.get("config");
-    return c.json({
-      success: true,
-      data: {
-        mode: isSingleUserMode(config) ? "single-user" : "oauth",
-        oauthConfigured: isOAuthConfigured(config),
+  router.get(
+    "/account/auth/mode",
+    describeRoute({
+      tags: [TAGS.Account],
+      summary: "Login mode",
+      description: "Public. Tells the SPA which login UI to render (OAuth vs. single-user) and whether OAuth is configured.",
+      responses: {
+        ...jsonOk(z.object({ mode: z.enum(["single-user", "oauth"]), oauthConfigured: z.boolean() }), "Login mode"),
       },
-    });
-  });
+    }),
+    (c) => {
+      const config = c.get("config");
+      return c.json({
+        success: true,
+        data: {
+          mode: isSingleUserMode(config) ? "single-user" : "oauth",
+          oauthConfigured: isOAuthConfigured(config),
+        },
+      });
+    },
+  );
 
   // POST /account/auth/login-local — public, env-credential login (single-user mode)
-  router.post("/account/auth/login-local", async (c) => {
-    {
-      const retryAfter = checkAuthRateLimit(rateLimitKey(c));
-      if (retryAfter > 0) {
-        c.header("Retry-After", String(retryAfter));
-        return c.json({ success: false, error: { code: "RATE_LIMITED", message: "Too many requests" } }, 429);
+  router.post(
+    "/account/auth/login-local",
+    describeRoute({
+      tags: [TAGS.Account],
+      summary: "Single-user login",
+      description: "Public. Username/password login for single-user mode. Uses timing-safe verification and a per-username lockout.",
+      responses: {
+        ...jsonOk(z.object({ id: z.string(), username: z.string(), name: z.string() }), "Logged in"),
+        ...errors(400, 401, 404, 429),
+      },
+    }),
+    async (c) => {
+      {
+        const retryAfter = checkAuthRateLimit(rateLimitKey(c));
+        if (retryAfter > 0) {
+          c.header("Retry-After", String(retryAfter));
+          return c.json({ success: false, error: { code: "RATE_LIMITED", message: "Too many requests" } }, 429);
+        }
       }
-    }
 
-    const db = c.get("db");
-    const config = c.get("config");
-    const logger = c.get("logger");
+      const db = c.get("db");
+      const config = c.get("config");
+      const logger = c.get("logger");
 
-    if (!isSingleUserMode(config)) {
-      return c.json({ success: false, error: { code: "SINGLE_USER_DISABLED", message: "Single-user mode is not enabled" } }, 404);
-    }
-
-    let body: { username?: unknown; password?: unknown };
-    try {
-      body = await c.req.json();
-    }
-    catch {
-      return c.json({ success: false, error: { code: "INVALID_BODY", message: "Invalid JSON body" } }, 400);
-    }
-
-    const usernameRaw = typeof body.username === "string" ? body.username : "";
-    const password = typeof body.password === "string" ? body.password : "";
-    if (!usernameRaw || !password) {
-      return c.json({ success: false, error: { code: "INVALID_CREDENTIALS", message: "Invalid credentials" } }, 400);
-    }
-
-    const single = getSingleUserConfig(config);
-
-    // Per-username lockout (proxy-rotation-resistant). Checked against the
-    // configured account *and* the submitted account so the attacker cannot
-    // probe past the lock by varying the username field on each request.
-    for (const candidate of [single.username, usernameRaw]) {
-      const lock = await isSingleUserLocked(db, candidate);
-      if (lock.locked) {
-        c.header("Retry-After", String(lock.retryAfterSeconds));
-        return c.json(
-          { success: false, error: { code: "ACCOUNT_LOCKED", message: "Account temporarily locked. Try again later." } },
-          429,
-        );
+      if (!isSingleUserMode(config)) {
+        return c.json({ success: false, error: { code: "SINGLE_USER_DISABLED", message: "Single-user mode is not enabled" } }, 404);
       }
-    }
 
-    const usernameMatches = usernameRaw.toLowerCase() === single.username;
+      let body: { username?: unknown; password?: unknown };
+      try {
+        body = await c.req.json();
+      }
+      catch {
+        return c.json({ success: false, error: { code: "INVALID_BODY", message: "Invalid JSON body" } }, 400);
+      }
 
-    // Always run the password verify even when the username does not match —
-    // keeps the comparison time roughly constant and avoids leaking which of
-    // the two halves was wrong.
-    let passwordMatches: boolean;
-    try {
-      passwordMatches = await verifyPassword(password, single.passwordHash);
-    }
-    catch (err) {
-      logger.error({ err: err instanceof Error ? err.message : String(err) }, "single-user password verify failed");
-      passwordMatches = false;
-    }
+      const usernameRaw = typeof body.username === "string" ? body.username : "";
+      const password = typeof body.password === "string" ? body.password : "";
+      if (!usernameRaw || !password) {
+        return c.json({ success: false, error: { code: "INVALID_CREDENTIALS", message: "Invalid credentials" } }, 400);
+      }
 
-    if (!usernameMatches || !passwordMatches) {
+      const single = getSingleUserConfig(config);
+
+      // Per-username lockout (proxy-rotation-resistant). Checked against the
+      // configured account *and* the submitted account so the attacker cannot
+      // probe past the lock by varying the username field on each request.
+      for (const candidate of [single.username, usernameRaw]) {
+        const lock = await isSingleUserLocked(db, candidate);
+        if (lock.locked) {
+          c.header("Retry-After", String(lock.retryAfterSeconds));
+          return c.json(
+            { success: false, error: { code: "ACCOUNT_LOCKED", message: "Account temporarily locked. Try again later." } },
+            429,
+          );
+        }
+      }
+
+      const usernameMatches = usernameRaw.toLowerCase() === single.username;
+
+      // Always run the password verify even when the username does not match —
+      // keeps the comparison time roughly constant and avoids leaking which of
+      // the two halves was wrong.
+      let passwordMatches: boolean;
+      try {
+        passwordMatches = await verifyPassword(password, single.passwordHash);
+      }
+      catch (err) {
+        logger.error({ err: err instanceof Error ? err.message : String(err) }, "single-user password verify failed");
+        passwordMatches = false;
+      }
+
+      if (!usernameMatches || !passwordMatches) {
       // Record against the configured account regardless of which half failed;
       // an attacker spraying random usernames against a single real account
       // should hit the same shared lock as a direct attack.
-      await recordSingleUserFailure(db, single.username);
+        await recordSingleUserFailure(db, single.username);
+        await audit(db, c.get("logger"), {
+          actorId: "system",
+          actorName: "system",
+          action: "auth.login_failed",
+          resourceType: "auth",
+          resourceId: "",
+          resourceName: "single-user",
+          detail: { username: usernameRaw.slice(0, 64) },
+          ip: getClientIp(c),
+          userAgent: c.req.header("user-agent") ?? "unknown",
+          result: "failure",
+        });
+        return c.json({ success: false, error: { code: "INVALID_CREDENTIALS", message: "Invalid credentials" } }, 401);
+      }
+
+      await clearSingleUserFailures(db, single.username);
+
+      const user = await upsertSingleUser(db, {
+        username: single.username,
+        name: single.name,
+        email: single.email,
+      });
+
+      const authCfg = await getAuthConfig(db, config);
+      const sessionId = await createSession(
+        db,
+        user.id,
+        SINGLE_USER_ACCESS_TOKEN,
+        undefined,
+        authCfg.sessionMaxAge,
+      );
+      writeSessionCookie(c, config.NODE_ENV, config.BASE_PATH, sessionId, authCfg.sessionMaxAge);
+
       await audit(db, c.get("logger"), {
-        actorId: "system",
-        actorName: "system",
-        action: "auth.login_failed",
-        resourceType: "auth",
-        resourceId: "",
-        resourceName: "single-user",
-        detail: { username: usernameRaw.slice(0, 64) },
+        actorId: user.id,
+        actorName: user.name,
+        action: "auth.login",
+        resourceType: "user",
+        resourceId: user.id,
+        resourceName: user.username,
+        detail: { mode: "single-user" },
         ip: getClientIp(c),
         userAgent: c.req.header("user-agent") ?? "unknown",
-        result: "failure",
+        result: "success",
       });
-      return c.json({ success: false, error: { code: "INVALID_CREDENTIALS", message: "Invalid credentials" } }, 401);
-    }
 
-    await clearSingleUserFailures(db, single.username);
-
-    const user = await upsertSingleUser(db, {
-      username: single.username,
-      name: single.name,
-      email: single.email,
-    });
-
-    const authCfg = await getAuthConfig(db, config);
-    const sessionId = await createSession(
-      db,
-      user.id,
-      SINGLE_USER_ACCESS_TOKEN,
-      undefined,
-      authCfg.sessionMaxAge,
-    );
-    writeSessionCookie(c, config.NODE_ENV, config.BASE_PATH, sessionId, authCfg.sessionMaxAge);
-
-    await audit(db, c.get("logger"), {
-      actorId: user.id,
-      actorName: user.name,
-      action: "auth.login",
-      resourceType: "user",
-      resourceId: user.id,
-      resourceName: user.username,
-      detail: { mode: "single-user" },
-      ip: getClientIp(c),
-      userAgent: c.req.header("user-agent") ?? "unknown",
-      result: "success",
-    });
-
-    return c.json({ success: true, data: { id: user.id, username: user.username, name: user.name } });
-  });
+      return c.json({ success: true, data: { id: user.id, username: user.username, name: user.name } });
+    },
+  );
 
   // POST /account/auth/totp/verify — verify TOTP during login
-  router.post("/account/auth/totp/verify", async (c) => {
-    {
-      const retryAfter = checkAuthRateLimit(rateLimitKey(c));
-      if (retryAfter > 0) {
-        c.header("Retry-After", String(retryAfter));
-        return c.json({ success: false, error: { code: "RATE_LIMITED", message: "Too many requests" } }, 429);
+  router.post(
+    "/account/auth/totp/verify",
+    describeRoute({
+      tags: [TAGS.Account],
+      summary: "Verify TOTP challenge",
+      description: "Public. Completes login by verifying the 6-digit TOTP code against the pending challenge cookie, then creates the session. Per-user lockout applies.",
+      responses: {
+        ...jsonOk(z.object({ redirect: z.string() }), "Verified, session created"),
+        ...errors(400, 429),
+      },
+    }),
+    async (c) => {
+      {
+        const retryAfter = checkAuthRateLimit(rateLimitKey(c));
+        if (retryAfter > 0) {
+          c.header("Retry-After", String(retryAfter));
+          return c.json({ success: false, error: { code: "RATE_LIMITED", message: "Too many requests" } }, 429);
+        }
       }
-    }
-    const db = c.get("db");
-    const config = c.get("config");
+      const db = c.get("db");
+      const config = c.get("config");
 
-    const challengeId = getCookie(c, totpPendingCookieName(config.NODE_ENV))
-      ?? getCookie(c, TOTP_PENDING_COOKIE_DEV);
-    if (!challengeId) {
-      return c.json({ success: false, error: { code: "NO_PENDING_TOTP", message: "No pending TOTP challenge" } }, 400);
-    }
+      const challengeId = getCookie(c, totpPendingCookieName(config.NODE_ENV))
+        ?? getCookie(c, TOTP_PENDING_COOKIE_DEV);
+      if (!challengeId) {
+        return c.json({ success: false, error: { code: "NO_PENDING_TOTP", message: "No pending TOTP challenge" } }, 400);
+      }
 
-    const body = await c.req.json();
-    const code = typeof body.code === "string" ? body.code : "";
-    if (code.length !== 6) {
-      return c.json({ success: false, error: { code: "INVALID_CODE", message: "Code must be 6 digits" } }, 400);
-    }
+      const body = await c.req.json();
+      const code = typeof body.code === "string" ? body.code : "";
+      if (code.length !== 6) {
+        return c.json({ success: false, error: { code: "INVALID_CODE", message: "Code must be 6 digits" } }, 400);
+      }
 
-    const challenge = await consumeTotpChallenge(db, challengeId);
-    if (!challenge) {
-      deleteCookie(c, totpPendingCookieName(config.NODE_ENV), {
-        path: cookiePath(config.BASE_PATH),
-        secure: config.NODE_ENV === "production",
-      });
-      return c.json({ success: false, error: { code: "EXPIRED_CHALLENGE", message: "TOTP challenge expired, please login again" } }, 400);
-    }
-
-    // Per-user lockout precedes verifyTotpCode so 5 wrong codes from rotating
-    // IPs still trip the gate (per-IP limiter alone misses that vector).
-    const { isTotpUserLocked } = await import("@/modules/account/users/totp.service");
-    const lockState = await isTotpUserLocked(db, challenge.userId);
-    if (lockState.locked) {
-      deleteCookie(c, totpPendingCookieName(config.NODE_ENV), {
-        path: cookiePath(config.BASE_PATH),
-        secure: config.NODE_ENV === "production",
-      });
-      c.header("Retry-After", String(lockState.retryAfterSeconds));
-      return c.json(
-        { success: false, error: { code: "TOTP_USER_LOCKED", message: "Too many failed attempts. Restart login after the lockout expires." } },
-        429,
-      );
-    }
-
-    const ok = await verifyTotpCode(db, challenge.userId, code);
-    if (!ok) {
-      // After verifyTotpCode flipped the failure counter, re-check whether
-      // this attempt tipped the user over the threshold so we surface the
-      // 429 immediately instead of inviting another guess.
-      const stateAfter = await isTotpUserLocked(db, challenge.userId);
-      if (stateAfter.locked) {
+      const challenge = await consumeTotpChallenge(db, challengeId);
+      if (!challenge) {
         deleteCookie(c, totpPendingCookieName(config.NODE_ENV), {
           path: cookiePath(config.BASE_PATH),
           secure: config.NODE_ENV === "production",
         });
-        c.header("Retry-After", String(stateAfter.retryAfterSeconds));
+        return c.json({ success: false, error: { code: "EXPIRED_CHALLENGE", message: "TOTP challenge expired, please login again" } }, 400);
+      }
+
+      // Per-user lockout precedes verifyTotpCode so 5 wrong codes from rotating
+      // IPs still trip the gate (per-IP limiter alone misses that vector).
+      const { isTotpUserLocked } = await import("@/modules/account/users/totp.service");
+      const lockState = await isTotpUserLocked(db, challenge.userId);
+      if (lockState.locked) {
+        deleteCookie(c, totpPendingCookieName(config.NODE_ENV), {
+          path: cookiePath(config.BASE_PATH),
+          secure: config.NODE_ENV === "production",
+        });
+        c.header("Retry-After", String(lockState.retryAfterSeconds));
         return c.json(
           { success: false, error: { code: "TOTP_USER_LOCKED", message: "Too many failed attempts. Restart login after the lockout expires." } },
           429,
         );
       }
-      // Re-create challenge so user can retry
-      const newId = await createTotpChallenge(
+
+      const ok = await verifyTotpCode(db, challenge.userId, code);
+      if (!ok) {
+      // After verifyTotpCode flipped the failure counter, re-check whether
+      // this attempt tipped the user over the threshold so we surface the
+      // 429 immediately instead of inviting another guess.
+        const stateAfter = await isTotpUserLocked(db, challenge.userId);
+        if (stateAfter.locked) {
+          deleteCookie(c, totpPendingCookieName(config.NODE_ENV), {
+            path: cookiePath(config.BASE_PATH),
+            secure: config.NODE_ENV === "production",
+          });
+          c.header("Retry-After", String(stateAfter.retryAfterSeconds));
+          return c.json(
+            { success: false, error: { code: "TOTP_USER_LOCKED", message: "Too many failed attempts. Restart login after the lockout expires." } },
+            429,
+          );
+        }
+        // Re-create challenge so user can retry
+        const newId = await createTotpChallenge(
+          db,
+          challenge.userId,
+          challenge.accessToken,
+          challenge.refreshToken ?? undefined,
+          challenge.expiresIn ?? undefined,
+          challenge.redirectUri,
+        );
+        setCookie(c, totpPendingCookieName(config.NODE_ENV), newId, {
+          httpOnly: true,
+          secure: config.NODE_ENV === "production",
+          sameSite: "Lax",
+          path: cookiePath(config.BASE_PATH),
+          maxAge: 300,
+        });
+        return c.json({ success: false, error: { code: "TOTP_VERIFY_FAILED", message: "Invalid TOTP code" } }, 400);
+      }
+
+      deleteCookie(c, totpPendingCookieName(config.NODE_ENV), {
+        path: cookiePath(config.BASE_PATH),
+        secure: config.NODE_ENV === "production",
+      });
+
+      const authCfg = await getAuthConfig(db, config);
+      const sessionId = await createSession(
         db,
         challenge.userId,
         challenge.accessToken,
         challenge.refreshToken ?? undefined,
         challenge.expiresIn ?? undefined,
-        challenge.redirectUri,
       );
-      setCookie(c, totpPendingCookieName(config.NODE_ENV), newId, {
-        httpOnly: true,
-        secure: config.NODE_ENV === "production",
-        sameSite: "Lax",
-        path: cookiePath(config.BASE_PATH),
-        maxAge: 300,
+
+      writeSessionCookie(c, config.NODE_ENV, config.BASE_PATH, sessionId, authCfg.sessionMaxAge);
+
+      // Resolve the human name for the audit row — challenge.userId is just
+      // the opaque id, which makes the audit log unreadable in the UI.
+      const { getUserById } = await import("@/modules/account/users/users.service");
+      const challengeUser = await getUserById(db, challenge.userId);
+      await audit(db, c.get("logger"), {
+        actorId: challenge.userId,
+        actorName: challengeUser?.name ?? challenge.userId,
+        action: "auth.login",
+        resourceType: "user",
+        resourceId: challenge.userId,
+        resourceName: "totp-verified",
+        ip: getClientIp(c),
+        userAgent: c.req.header("user-agent") ?? "unknown",
+        result: "success",
       });
-      return c.json({ success: false, error: { code: "TOTP_VERIFY_FAILED", message: "Invalid TOTP code" } }, 400);
-    }
 
-    deleteCookie(c, totpPendingCookieName(config.NODE_ENV), {
-      path: cookiePath(config.BASE_PATH),
-      secure: config.NODE_ENV === "production",
-    });
-
-    const authCfg = await getAuthConfig(db, config);
-    const sessionId = await createSession(
-      db,
-      challenge.userId,
-      challenge.accessToken,
-      challenge.refreshToken ?? undefined,
-      challenge.expiresIn ?? undefined,
-    );
-
-    writeSessionCookie(c, config.NODE_ENV, config.BASE_PATH, sessionId, authCfg.sessionMaxAge);
-
-    // Resolve the human name for the audit row — challenge.userId is just
-    // the opaque id, which makes the audit log unreadable in the UI.
-    const { getUserById } = await import("@/modules/account/users/users.service");
-    const challengeUser = await getUserById(db, challenge.userId);
-    await audit(db, c.get("logger"), {
-      actorId: challenge.userId,
-      actorName: challengeUser?.name ?? challenge.userId,
-      action: "auth.login",
-      resourceType: "user",
-      resourceId: challenge.userId,
-      resourceName: "totp-verified",
-      ip: getClientIp(c),
-      userAgent: c.req.header("user-agent") ?? "unknown",
-      result: "success",
-    });
-
-    return c.json({ success: true, data: { redirect: sanitizeRedirect(challenge.redirectUri, config.BASE_PATH) } });
-  });
+      return c.json({ success: true, data: { redirect: sanitizeRedirect(challenge.redirectUri, config.BASE_PATH) } });
+    },
+  );
 
   return router;
 }

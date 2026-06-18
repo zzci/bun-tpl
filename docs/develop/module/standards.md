@@ -147,7 +147,8 @@ Three route groups exist under `apps/api/src/routes/`:
 A new module's routes default to `protected.ts`. Use `public.ts` only when the route legitimately must answer in both states. Use `setup.ts` only when the route exists exclusively to recover the system from a locked state.
 
 - `protected.ts` applies `requireUnlocked` by default; the module itself wraps `authRequired` / `adminRequired` explicitly inside its `<name>.routes.ts`.
-- Inbound validation: parse the body with the module's zod schema (`schema.parse(await c.req.json())`); the shared `errorHandler` turns the resulting `ZodError` into a uniform 422 `VALIDATION_ERROR`.
+- OpenAPI: every route declares `describeRoute(...)` so it appears in the generated spec; see [openapi-standard.md](openapi-standard.md).
+- Inbound validation: validate input with `validator("json" | "query" | "param", schema)` from `@/shared/lib/openapi`, then read it via `c.req.valid(target)`. This feeds the request schema into the spec and still yields the uniform 422 `VALIDATION_ERROR` envelope on failure (via a shared hook). Routes that hand-parse for security/timing reasons keep their handler and only add `describeRoute`.
 - Error response shape: `{ success: false, error: { code, message } }`. Success response shape: `{ success: true, data, meta? }`.
 - Webhook / Bearer-token routes: create a separate `<name>.external.routes.ts`; the CSRF guard automatically lets `Authorization: Bearer …` requests through.
 

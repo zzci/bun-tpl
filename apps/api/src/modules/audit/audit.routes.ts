@@ -2,8 +2,24 @@ import type { AppEnv } from "@/shared/lib/types";
 import { Hono } from "hono";
 import { z } from "zod";
 import { NotFoundError } from "@/shared/lib/errors";
+import { describeRoute, errors, jsonOk, jsonPaged, SECURITY, TAGS, validator } from "@/shared/lib/openapi";
 import { adminRequired, authRequired } from "@/shared/middleware/auth";
 import { getAuditEventById, listAuditEvents } from "./audit.service";
+
+const auditEventSchema = z.object({
+  id: z.string(),
+  actorId: z.string(),
+  actorName: z.string(),
+  action: z.string(),
+  resourceType: z.string(),
+  resourceId: z.string(),
+  resourceName: z.string(),
+  detail: z.string().nullable(),
+  ip: z.string(),
+  userAgent: z.string(),
+  result: z.enum(["success", "failure"]),
+  createdAt: z.string(),
+});
 
 const isoDatetime = z.string().regex(/^\d{4}-\d{2}-\d{2}(T\d{2}:\d{2}:\d{2}(\.\d+)?(Z|[+-]\d{2}:\d{2})?)?$/, "Invalid ISO 8601 datetime");
 const RE_DATE_ONLY = /^\d{4}-\d{2}-\d{2}$/;
@@ -38,42 +54,71 @@ export function auditRoutes() {
 
   router.use("*", authRequired);
 
-  router.get("/audit", adminRequired, async (c) => {
-    const db = c.get("db");
-    const q = auditQuerySchema.parse(c.req.query());
+  router.get(
+    "/audit",
+    describeRoute({
+      tags: [TAGS.Audit],
+      summary: "List audit events",
+      description: "Paginated, filterable audit log. Admin only.",
+      security: SECURITY.session,
+      responses: {
+        ...jsonPaged(auditEventSchema, "Audit events"),
+        ...errors(401, 403, 422),
+      },
+    }),
+    adminRequired,
+    validator("query", auditQuerySchema),
+    async (c) => {
+      const db = c.get("db");
+      const q = c.req.valid("query");
 
-    const { data, total } = await listAuditEvents(db, {
-      actorId: q.actor_id,
-      action: q.action,
-      resourceType: q.resource_type,
-      resourceId: q.resource_id,
-      result: q.result,
-      from: q.from,
-      to: normaliseToBoundary(q.to),
-      page: q.page,
-      limit: q.limit,
-    });
-
-    return c.json({
-      success: true,
-      data,
-      meta: {
-        total,
+      const { data, total } = await listAuditEvents(db, {
+        actorId: q.actor_id,
+        action: q.action,
+        resourceType: q.resource_type,
+        resourceId: q.resource_id,
+        result: q.result,
+        from: q.from,
+        to: normaliseToBoundary(q.to),
         page: q.page,
         limit: q.limit,
-      },
-    });
-  });
+      });
 
-  router.get("/audit/:id", adminRequired, async (c) => {
-    const db = c.get("db");
-    const id = c.req.param("id");
-    const event = await getAuditEventById(db, id);
-    if (!event) {
-      throw new NotFoundError("Audit event", id);
-    }
-    return c.json({ success: true, data: event });
-  });
+      return c.json({
+        success: true,
+        data,
+        meta: {
+          total,
+          page: q.page,
+          limit: q.limit,
+        },
+      });
+    },
+  );
+
+  router.get(
+    "/audit/:id",
+    describeRoute({
+      tags: [TAGS.Audit],
+      summary: "Get audit event",
+      security: SECURITY.session,
+      responses: {
+        ...jsonOk(auditEventSchema, "Audit event"),
+        ...errors(401, 403, 404),
+      },
+    }),
+    adminRequired,
+    validator("param", z.object({ id: z.string() })),
+    async (c) => {
+      const db = c.get("db");
+      const { id } = c.req.valid("param");
+      const event = await getAuditEventById(db, id);
+      if (!event) {
+        throw new NotFoundError("Audit event", id);
+      }
+      return c.json({ success: true, data: event });
+    },
+  );
 
   return router;
 }

@@ -17,6 +17,9 @@ module does*, see [`../../modules/`](../../modules/).
 
 ## Cross-cutting topics
 
+- **[openapi-standard.md](openapi-standard.md)** — how a module wires its
+  routes into the generated OpenAPI spec (`describeRoute` + `validator`).
+  Every route a module exposes must appear in the spec.
 - **[policy-standard.md](policy-standard.md)** — how a module declares its
   permission surface via `defineResource` + the route binding registry.
   Every module that owns user-facing data needs this.

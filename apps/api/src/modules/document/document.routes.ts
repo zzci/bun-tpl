@@ -18,6 +18,7 @@ import { mountItemCommentRoutes } from "@/modules/item/comment.routes";
 import { NOOP_POLICY_LOGGER, policyContext } from "@/modules/policy";
 import { getClientIp } from "@/shared/lib/client-ip";
 import { AppError, NotFoundError } from "@/shared/lib/errors";
+import { describeRoute, errors, jsonCreated, jsonOk, jsonPaged, raw, SECURITY, TAGS, validator } from "@/shared/lib/openapi";
 import { authRequired } from "@/shared/middleware/auth";
 import { documentAccess } from "./document.permission";
 import {
@@ -61,6 +62,19 @@ const updateSchema = z.object({
 
 const moveSchema = z.object({
   parentId: z.string().nullable(),
+});
+
+const documentSchema = z.object({
+  id: z.string(),
+  title: z.string(),
+  content: z.string().nullable(),
+  tags: z.array(z.string()),
+  parentId: z.string().nullable(),
+  commentsLocked: z.boolean(),
+  creatorId: z.string(),
+  version: z.number(),
+  createdAt: z.string(),
+  updatedAt: z.string(),
 });
 
 function auditMeta(c: Context) {
@@ -110,334 +124,514 @@ export function documentRoutes() {
   const router = new Hono<AppEnv>();
   router.use("*", authRequired);
 
-  router.get("/documents", async (c) => {
-    const db = c.get("db");
-    const user = c.get("user")!;
-    const q = c.req.query("q");
-    const tag = c.req.query("tag");
-    const creatorId = c.req.query("creator_id");
-    const page = Math.max(1, Math.floor(Number.parseInt(c.req.query("page") ?? "", 10)) || 1);
-    const limit = Math.min(100, Math.max(1, Math.floor(Number.parseInt(c.req.query("limit") ?? "", 10)) || 20));
+  router.get(
+    "/documents",
+    describeRoute({
+      tags: [TAGS.Document],
+      summary: "List documents",
+      description: "Paginated, filterable documents. Admins see all; others see their own/shared documents.",
+      security: SECURITY.session,
+      responses: {
+        ...jsonPaged(documentSchema, "Documents"),
+        ...errors(401, 403),
+      },
+    }),
+    async (c) => {
+      const db = c.get("db");
+      const user = c.get("user")!;
+      const q = c.req.query("q");
+      const tag = c.req.query("tag");
+      const creatorId = c.req.query("creator_id");
+      const page = Math.max(1, Math.floor(Number.parseInt(c.req.query("page") ?? "", 10)) || 1);
+      const limit = Math.min(100, Math.max(1, Math.floor(Number.parseInt(c.req.query("limit") ?? "", 10)) || 20));
 
-    const isAdmin = user.role === "admin";
-    const result = isAdmin
-      ? await listDocuments(db, { q, tag, creatorId, page, limit })
-      : await listMyDocuments(db, { userId: user.id, q, tag, page, limit });
+      const isAdmin = user.role === "admin";
+      const result = isAdmin
+        ? await listDocuments(db, { q, tag, creatorId, page, limit })
+        : await listMyDocuments(db, { userId: user.id, q, tag, page, limit });
 
-    return c.json({
-      success: true,
-      data: result.data,
-      meta: { total: result.total, page, limit },
-    });
-  });
+      return c.json({
+        success: true,
+        data: result.data,
+        meta: { total: result.total, page, limit },
+      });
+    },
+  );
 
-  router.get("/documents/tree", async (c) => {
-    const db = c.get("db");
-    const user = c.get("user")!;
-    const data = await getDocumentTreeForUser(db, user);
-    return c.json({ success: true, data });
-  });
+  router.get(
+    "/documents/tree",
+    describeRoute({
+      tags: [TAGS.Document],
+      summary: "Document tree",
+      description: "Hierarchical document tree scoped to the current user.",
+      security: SECURITY.session,
+      responses: {
+        ...jsonOk(z.unknown(), "Document tree"),
+        ...errors(401, 403),
+      },
+    }),
+    async (c) => {
+      const db = c.get("db");
+      const user = c.get("user")!;
+      const data = await getDocumentTreeForUser(db, user);
+      return c.json({ success: true, data });
+    },
+  );
 
-  router.get("/documents/tags", async (c) => {
-    const db = c.get("db");
-    const tags = await listAllTags(db);
-    return c.json({ success: true, data: tags });
-  });
+  router.get(
+    "/documents/tags",
+    describeRoute({
+      tags: [TAGS.Document],
+      summary: "List document tags",
+      security: SECURITY.session,
+      responses: {
+        ...jsonOk(z.array(z.string()), "Tags"),
+        ...errors(401, 403),
+      },
+    }),
+    async (c) => {
+      const db = c.get("db");
+      const tags = await listAllTags(db);
+      return c.json({ success: true, data: tags });
+    },
+  );
 
-  router.get("/documents/users", async (c) => {
-    const db = c.get("db");
-    const data = await listActiveUsers(db);
-    return c.json({ success: true, data });
-  });
+  router.get(
+    "/documents/users",
+    describeRoute({
+      tags: [TAGS.Document],
+      summary: "List active users",
+      description: "Active users available as document share targets.",
+      security: SECURITY.session,
+      responses: {
+        ...jsonOk(z.unknown(), "Users"),
+        ...errors(401, 403),
+      },
+    }),
+    async (c) => {
+      const db = c.get("db");
+      const data = await listActiveUsers(db);
+      return c.json({ success: true, data });
+    },
+  );
 
-  router.get("/documents/groups", async (c) => {
-    const db = c.get("db");
-    const data = await listAllGroups(db);
-    return c.json({ success: true, data });
-  });
+  router.get(
+    "/documents/groups",
+    describeRoute({
+      tags: [TAGS.Document],
+      summary: "List groups",
+      description: "Groups available as document share targets.",
+      security: SECURITY.session,
+      responses: {
+        ...jsonOk(z.unknown(), "Groups"),
+        ...errors(401, 403),
+      },
+    }),
+    async (c) => {
+      const db = c.get("db");
+      const data = await listAllGroups(db);
+      return c.json({ success: true, data });
+    },
+  );
 
-  router.post("/documents", async (c) => {
-    const db = c.get("db");
-    const body = createSchema.parse(await c.req.json());
-    const actor = c.get("user")!;
-    await assertParentTargetAllowed(c, body.parentId);
-    const doc = await createDocument(db, { ...body, creatorId: actor.id });
-    await audit(db, c.get("logger"), {
-      actorId: actor.id,
-      actorName: actor.name,
-      action: "document.created",
-      resourceType: "document",
-      resourceId: doc.id,
-      resourceName: doc.title,
-      ...auditMeta(c),
-      result: "success",
-    });
-    return c.json({ success: true, data: doc }, 201);
-  });
+  router.post(
+    "/documents",
+    describeRoute({
+      tags: [TAGS.Document],
+      summary: "Create document",
+      security: SECURITY.session,
+      responses: {
+        ...jsonCreated(documentSchema, "Document created"),
+        ...errors(401, 403, 404, 422),
+      },
+    }),
+    validator("json", createSchema),
+    async (c) => {
+      const db = c.get("db");
+      const body = c.req.valid("json");
+      const actor = c.get("user")!;
+      await assertParentTargetAllowed(c, body.parentId);
+      const doc = await createDocument(db, { ...body, creatorId: actor.id });
+      await audit(db, c.get("logger"), {
+        actorId: actor.id,
+        actorName: actor.name,
+        action: "document.created",
+        resourceType: "document",
+        resourceId: doc.id,
+        resourceName: doc.title,
+        ...auditMeta(c),
+        result: "success",
+      });
+      return c.json({ success: true, data: doc }, 201);
+    },
+  );
 
-  router.get("/documents/:id", async (c) => {
-    const db = c.get("db");
-    const id = c.req.param("id")!;
-    const doc = await getDocumentById(db, id);
-    if (!doc)
-      throw new NotFoundError("Document", id);
-    // Defense in depth: the global policyMiddleware already gates this,
-    // but it falls through when the route-binding registry desyncs or
-    // the id doesn't resolve there. Re-assert in-handler so object-level
-    // authz never depends solely on the registry. Admin short-circuits
-    // via the `bypass` hook inside `can()`.
-    await documentAccess.assert(policyContext(c)!, "document:read", doc.id);
-    return c.json({ success: true, data: doc });
-  });
+  router.get(
+    "/documents/:id",
+    describeRoute({
+      tags: [TAGS.Document],
+      summary: "Get document",
+      security: SECURITY.session,
+      responses: {
+        ...jsonOk(documentSchema, "Document"),
+        ...errors(401, 403, 404),
+      },
+    }),
+    async (c) => {
+      const db = c.get("db");
+      const id = c.req.param("id")!;
+      const doc = await getDocumentById(db, id);
+      if (!doc)
+        throw new NotFoundError("Document", id);
+      // Defense in depth: the global policyMiddleware already gates this,
+      // but it falls through when the route-binding registry desyncs or
+      // the id doesn't resolve there. Re-assert in-handler so object-level
+      // authz never depends solely on the registry. Admin short-circuits
+      // via the `bypass` hook inside `can()`.
+      await documentAccess.assert(policyContext(c)!, "document:read", doc.id);
+      return c.json({ success: true, data: doc });
+    },
+  );
 
-  router.patch("/documents/:id", async (c) => {
-    const db = c.get("db");
-    const user = c.get("user")!;
-    const id = c.req.param("id")!;
-    const existing = await getDocumentById(db, id);
-    if (!existing)
-      throw new NotFoundError("Document", id);
+  router.patch(
+    "/documents/:id",
+    describeRoute({
+      tags: [TAGS.Document],
+      summary: "Update document",
+      description: "Optimistic-concurrency update (requires `version`). 409 on version conflict.",
+      security: SECURITY.session,
+      responses: {
+        ...jsonOk(documentSchema, "Document updated"),
+        ...errors(401, 403, 404, 409, 422),
+      },
+    }),
+    validator("json", updateSchema),
+    async (c) => {
+      const db = c.get("db");
+      const user = c.get("user")!;
+      const id = c.req.param("id")!;
+      const existing = await getDocumentById(db, id);
+      if (!existing)
+        throw new NotFoundError("Document", id);
 
-    const body = updateSchema.parse(await c.req.json());
+      const body = c.req.valid("json");
 
-    if (body.parentId !== undefined && body.parentId !== existing.parentId) {
+      if (body.parentId !== undefined && body.parentId !== existing.parentId) {
+        await assertMoveTargetAllowed(c, id, body.parentId);
+      }
+
+      // Field-level write policy: `commentsLocked` requires `owner` even
+      // though the route action `document:update` admits editors. Letting
+      // the framework reject the unauthorised field keeps the lock rule in
+      // one place — the resource definition — rather than re-stating it
+      // here every time the patch surface changes.
+      const ctx = policyContext(c)!;
+      const item = await resolveDocumentItem(db, id);
+      if (!item)
+        throw new NotFoundError("Document", id);
+      const { version: expectedVersion, ...mutable } = body;
+      const safe = await documentAccess.filterWritable(ctx, item.id, mutable, { onForbidden: "reject" });
+
+      const updated = await updateDocument(db, id, { ...safe, expectedVersion });
+      if (!updated)
+        throw new NotFoundError("Document", id);
+      if (isVersionConflict(updated)) {
+        return c.json(
+          { success: false, error: { code: "VERSION_CONFLICT", message: "Document was modified by another writer" }, data: updated.current },
+          409,
+        );
+      }
+
+      await audit(db, c.get("logger"), {
+        actorId: user.id,
+        actorName: user.name,
+        action: "document.updated",
+        resourceType: "document",
+        resourceId: id,
+        resourceName: existing.title,
+        ...auditMeta(c),
+        result: "success",
+      });
+
+      return c.json({ success: true, data: updated });
+    },
+  );
+
+  router.patch(
+    "/documents/:id/move",
+    describeRoute({
+      tags: [TAGS.Document],
+      summary: "Move document",
+      description: "Reparent a document (and its subtree) under a new parent, or to root with `parentId: null`.",
+      security: SECURITY.session,
+      responses: {
+        ...jsonOk(documentSchema, "Document moved"),
+        ...errors(400, 401, 403, 404, 422),
+      },
+    }),
+    validator("json", moveSchema),
+    async (c) => {
+      const db = c.get("db");
+      const user = c.get("user")!;
+      const id = c.req.param("id")!;
+      const existing = await getDocumentById(db, id);
+      if (!existing)
+        throw new NotFoundError("Document", id);
+
+      const body = c.req.valid("json");
       await assertMoveTargetAllowed(c, id, body.parentId);
-    }
 
-    // Field-level write policy: `commentsLocked` requires `owner` even
-    // though the route action `document:update` admits editors. Letting
-    // the framework reject the unauthorised field keeps the lock rule in
-    // one place — the resource definition — rather than re-stating it
-    // here every time the patch surface changes.
-    const ctx = policyContext(c)!;
-    const item = await resolveDocumentItem(db, id);
-    if (!item)
-      throw new NotFoundError("Document", id);
-    const { version: expectedVersion, ...mutable } = body;
-    const safe = await documentAccess.filterWritable(ctx, item.id, mutable, { onForbidden: "reject" });
+      const moved = await updateDocument(db, id, { parentId: body.parentId });
+      if (!moved || isVersionConflict(moved))
+        throw new NotFoundError("Document", id);
 
-    const updated = await updateDocument(db, id, { ...safe, expectedVersion });
-    if (!updated)
-      throw new NotFoundError("Document", id);
-    if (isVersionConflict(updated)) {
-      return c.json(
-        { success: false, error: { code: "VERSION_CONFLICT", message: "Document was modified by another writer" }, data: updated.current },
-        409,
-      );
-    }
+      await audit(db, c.get("logger"), {
+        actorId: user.id,
+        actorName: user.name,
+        action: "document.updated",
+        resourceType: "document",
+        resourceId: id,
+        resourceName: existing.title,
+        detail: { moved: { from: existing.parentId, to: body.parentId } },
+        ...auditMeta(c),
+        result: "success",
+      });
 
-    await audit(db, c.get("logger"), {
-      actorId: user.id,
-      actorName: user.name,
-      action: "document.updated",
-      resourceType: "document",
-      resourceId: id,
-      resourceName: existing.title,
-      ...auditMeta(c),
-      result: "success",
-    });
+      return c.json({ success: true, data: moved });
+    },
+  );
 
-    return c.json({ success: true, data: updated });
-  });
+  router.delete(
+    "/documents/:id",
+    describeRoute({
+      tags: [TAGS.Document],
+      summary: "Delete document",
+      description: "Soft-delete a document and its subtree, releasing attachments.",
+      security: SECURITY.session,
+      responses: {
+        ...jsonOk(z.null(), "Document deleted"),
+        ...errors(401, 403, 404),
+      },
+    }),
+    async (c) => {
+      const db = c.get("db");
+      const user = c.get("user")!;
+      const id = c.req.param("id")!;
+      const existing = await getDocumentById(db, id);
+      if (!existing)
+        throw new NotFoundError("Document", id);
+      // Defense in depth (see GET /documents/:id): never let a subtree
+      // delete depend solely on the global policy registry.
+      const targetItem = await resolveDocumentItem(db, id);
+      if (!targetItem)
+        throw new NotFoundError("Document", id);
+      await documentAccess.assert(policyContext(c)!, "document:delete", targetItem.id);
 
-  router.patch("/documents/:id/move", async (c) => {
-    const db = c.get("db");
-    const user = c.get("user")!;
-    const id = c.req.param("id")!;
-    const existing = await getDocumentById(db, id);
-    if (!existing)
-      throw new NotFoundError("Document", id);
+      const descendantIds = await listDescendantIds(db, id);
+      const descendantRows = await Promise.all(descendantIds.map(d => getDocumentById(db, d)));
 
-    const body = moveSchema.parse(await c.req.json());
-    await assertMoveTargetAllowed(c, id, body.parentId);
+      // Release every attachment in the subtree before stamping deleted_at —
+      // refcounts drain so the async GC reclaims any blobs that were only
+      // referenced by the deleted documents.
+      const item = await resolveDocumentItem(db, id);
+      if (item)
+        await releaseAllByOwner(db, c.get("config"), "item_attachment", item.id);
+      for (const dId of descendantIds) {
+        const dItem = await resolveDocumentItem(db, dId);
+        if (dItem)
+          await releaseAllByOwner(db, c.get("config"), "item_attachment", dItem.id);
+      }
 
-    const moved = await updateDocument(db, id, { parentId: body.parentId });
-    if (!moved || isVersionConflict(moved))
-      throw new NotFoundError("Document", id);
+      await softDeleteDocument(db, id);
 
-    await audit(db, c.get("logger"), {
-      actorId: user.id,
-      actorName: user.name,
-      action: "document.updated",
-      resourceType: "document",
-      resourceId: id,
-      resourceName: existing.title,
-      detail: { moved: { from: existing.parentId, to: body.parentId } },
-      ...auditMeta(c),
-      result: "success",
-    });
-
-    return c.json({ success: true, data: moved });
-  });
-
-  router.delete("/documents/:id", async (c) => {
-    const db = c.get("db");
-    const user = c.get("user")!;
-    const id = c.req.param("id")!;
-    const existing = await getDocumentById(db, id);
-    if (!existing)
-      throw new NotFoundError("Document", id);
-    // Defense in depth (see GET /documents/:id): never let a subtree
-    // delete depend solely on the global policy registry.
-    const targetItem = await resolveDocumentItem(db, id);
-    if (!targetItem)
-      throw new NotFoundError("Document", id);
-    await documentAccess.assert(policyContext(c)!, "document:delete", targetItem.id);
-
-    const descendantIds = await listDescendantIds(db, id);
-    const descendantRows = await Promise.all(descendantIds.map(d => getDocumentById(db, d)));
-
-    // Release every attachment in the subtree before stamping deleted_at —
-    // refcounts drain so the async GC reclaims any blobs that were only
-    // referenced by the deleted documents.
-    const item = await resolveDocumentItem(db, id);
-    if (item)
-      await releaseAllByOwner(db, c.get("config"), "item_attachment", item.id);
-    for (const dId of descendantIds) {
-      const dItem = await resolveDocumentItem(db, dId);
-      if (dItem)
-        await releaseAllByOwner(db, c.get("config"), "item_attachment", dItem.id);
-    }
-
-    await softDeleteDocument(db, id);
-
-    const meta = auditMeta(c);
-    await audit(db, c.get("logger"), {
-      actorId: user.id,
-      actorName: user.name,
-      action: "document.deleted",
-      resourceType: "document",
-      resourceId: id,
-      resourceName: existing.title,
-      ...meta,
-      result: "success",
-    });
-    for (const d of descendantRows) {
-      if (!d)
-        continue;
+      const meta = auditMeta(c);
       await audit(db, c.get("logger"), {
         actorId: user.id,
         actorName: user.name,
         action: "document.deleted",
         resourceType: "document",
-        resourceId: d.id,
-        resourceName: d.title,
-        detail: { cascadedFrom: id },
+        resourceId: id,
+        resourceName: existing.title,
         ...meta,
         result: "success",
       });
-    }
-    return c.json({ success: true, data: null });
-  });
+      for (const d of descendantRows) {
+        if (!d)
+          continue;
+        await audit(db, c.get("logger"), {
+          actorId: user.id,
+          actorName: user.name,
+          action: "document.deleted",
+          resourceType: "document",
+          resourceId: d.id,
+          resourceName: d.title,
+          detail: { cascadedFrom: id },
+          ...meta,
+          result: "success",
+        });
+      }
+      return c.json({ success: true, data: null });
+    },
+  );
 
   // ── Attachment endpoints ──
 
-  router.post("/documents/:id/attachments", async (c) => {
-    const db = c.get("db");
-    const user = c.get("user")!;
-    const id = c.req.param("id")!;
-    const doc = await getDocumentById(db, id);
-    if (!doc)
-      throw new NotFoundError("Document", id);
-    const item = await resolveDocumentItem(db, id);
-    if (!item)
-      throw new NotFoundError("Document", id);
-    // Defense in depth (see GET /documents/:id).
-    await documentAccess.assert(policyContext(c)!, "document:upload", item.id);
+  router.post(
+    "/documents/:id/attachments",
+    describeRoute({
+      tags: [TAGS.Document],
+      summary: "Upload document attachment",
+      description: "Multipart form upload (`file` field). 413 when the upload exceeds the configured limit.",
+      security: SECURITY.session,
+      responses: {
+        ...jsonCreated(z.unknown(), "Attachment uploaded"),
+        ...errors(400, 401, 403, 404, 413),
+      },
+    }),
+    async (c) => {
+      const db = c.get("db");
+      const user = c.get("user")!;
+      const id = c.req.param("id")!;
+      const doc = await getDocumentById(db, id);
+      if (!doc)
+        throw new NotFoundError("Document", id);
+      const item = await resolveDocumentItem(db, id);
+      if (!item)
+        throw new NotFoundError("Document", id);
+      // Defense in depth (see GET /documents/:id).
+      await documentAccess.assert(policyContext(c)!, "document:upload", item.id);
 
-    const config = c.get("config");
-    const contentLength = Number(c.req.header("content-length") ?? "0");
-    if (contentLength > config.MAX_UPLOAD_BYTES) {
-      throw new AppError("Upload too large", 413, "UPLOAD_TOO_LARGE");
-    }
+      const config = c.get("config");
+      const contentLength = Number(c.req.header("content-length") ?? "0");
+      if (contentLength > config.MAX_UPLOAD_BYTES) {
+        throw new AppError("Upload too large", 413, "UPLOAD_TOO_LARGE");
+      }
 
-    const formData = await c.req.formData();
-    const file = formData.get("file");
-    if (!(file instanceof File)) {
-      throw new AppError("No file provided", 400, "VALIDATION_ERROR");
-    }
-    const { reference, file: uploaded } = await uploadAndReference(db, config, {
-      file,
-      ownerType: "item_attachment",
-      ownerId: item.id,
-      uploadedBy: user.id,
-    });
-    const view = makeAttachmentView(reference, uploaded);
+      const formData = await c.req.formData();
+      const file = formData.get("file");
+      if (!(file instanceof File)) {
+        throw new AppError("No file provided", 400, "VALIDATION_ERROR");
+      }
+      const { reference, file: uploaded } = await uploadAndReference(db, config, {
+        file,
+        ownerType: "item_attachment",
+        ownerId: item.id,
+        uploadedBy: user.id,
+      });
+      const view = makeAttachmentView(reference, uploaded);
 
-    await audit(db, c.get("logger"), {
-      actorId: user.id,
-      actorName: user.name,
-      action: "document.attachment_uploaded",
-      resourceType: "document",
-      resourceId: id,
-      resourceName: doc.title,
-      detail: { attachmentId: reference.id, filename: file.name, size: file.size },
-      ...auditMeta(c),
-      result: "success",
-    });
+      await audit(db, c.get("logger"), {
+        actorId: user.id,
+        actorName: user.name,
+        action: "document.attachment_uploaded",
+        resourceType: "document",
+        resourceId: id,
+        resourceName: doc.title,
+        detail: { attachmentId: reference.id, filename: file.name, size: file.size },
+        ...auditMeta(c),
+        result: "success",
+      });
 
-    return c.json({ success: true, data: view }, 201);
-  });
+      return c.json({ success: true, data: view }, 201);
+    },
+  );
 
-  router.get("/documents/:id/attachments", async (c) => {
-    const db = c.get("db");
-    const id = c.req.param("id")!;
-    const item = await resolveDocumentItem(db, id);
-    if (!item)
-      throw new NotFoundError("Document", id);
-    await documentAccess.assert(policyContext(c)!, "document:read", item.id);
-    const data = await listAttachmentsByOwner(db, "item_attachment", item.id);
-    return c.json({ success: true, data });
-  });
+  router.get(
+    "/documents/:id/attachments",
+    describeRoute({
+      tags: [TAGS.Document],
+      summary: "List document attachments",
+      security: SECURITY.session,
+      responses: {
+        ...jsonOk(z.unknown(), "Attachments"),
+        ...errors(401, 403, 404),
+      },
+    }),
+    async (c) => {
+      const db = c.get("db");
+      const id = c.req.param("id")!;
+      const item = await resolveDocumentItem(db, id);
+      if (!item)
+        throw new NotFoundError("Document", id);
+      await documentAccess.assert(policyContext(c)!, "document:read", item.id);
+      const data = await listAttachmentsByOwner(db, "item_attachment", item.id);
+      return c.json({ success: true, data });
+    },
+  );
 
-  router.get("/documents/:id/attachments/:aid", async (c) => {
-    const db = c.get("db");
-    const id = c.req.param("id")!;
-    const aid = c.req.param("aid")!;
-    const item = await resolveDocumentItem(db, id);
-    if (!item)
-      throw new NotFoundError("Document", id);
-    await documentAccess.assert(policyContext(c)!, "document:download", item.id);
-    const ref = await getReferenceById(db, aid);
-    if (!ref || ref.ownerType !== "item_attachment" || ref.ownerId !== item.id)
-      throw new NotFoundError("Attachment", aid);
-    const file = await getFileById(db, ref.fileId);
-    if (!file)
-      throw new NotFoundError("File", aid);
-    const wantInline = c.req.query("inline") === "true";
-    return await buildDownloadResponse(c.get("config"), file, ref, { inline: wantInline });
-  });
+  router.get(
+    "/documents/:id/attachments/:aid",
+    describeRoute({
+      tags: [TAGS.Document],
+      summary: "Download document attachment",
+      description: "Streams the attachment. `inline=true` serves it for in-browser viewing.",
+      security: SECURITY.session,
+      responses: {
+        ...raw(200, "application/octet-stream", "Attachment content"),
+        ...errors(401, 403, 404),
+      },
+    }),
+    async (c) => {
+      const db = c.get("db");
+      const id = c.req.param("id")!;
+      const aid = c.req.param("aid")!;
+      const item = await resolveDocumentItem(db, id);
+      if (!item)
+        throw new NotFoundError("Document", id);
+      await documentAccess.assert(policyContext(c)!, "document:download", item.id);
+      const ref = await getReferenceById(db, aid);
+      if (!ref || ref.ownerType !== "item_attachment" || ref.ownerId !== item.id)
+        throw new NotFoundError("Attachment", aid);
+      const file = await getFileById(db, ref.fileId);
+      if (!file)
+        throw new NotFoundError("File", aid);
+      const wantInline = c.req.query("inline") === "true";
+      return await buildDownloadResponse(c.get("config"), file, ref, { inline: wantInline });
+    },
+  );
 
-  router.delete("/documents/:id/attachments/:aid", async (c) => {
-    const db = c.get("db");
-    const user = c.get("user")!;
-    const id = c.req.param("id")!;
-    const aid = c.req.param("aid")!;
-    const doc = await getDocumentById(db, id);
-    if (!doc)
-      throw new NotFoundError("Document", id);
-    const item = await resolveDocumentItem(db, id);
-    if (!item)
-      throw new NotFoundError("Document", id);
-    // Defense in depth (see GET /documents/:id).
-    await documentAccess.assert(policyContext(c)!, "document:delete_attachment", item.id);
-    const ref = await getReferenceById(db, aid);
-    if (!ref || ref.ownerType !== "item_attachment" || ref.ownerId !== item.id)
-      throw new NotFoundError("Attachment", aid);
-    await releaseReference(db, c.get("config"), { referenceId: aid });
-    await audit(db, c.get("logger"), {
-      actorId: user.id,
-      actorName: user.name,
-      action: "document.attachment_deleted",
-      resourceType: "document",
-      resourceId: id,
-      resourceName: doc.title,
-      detail: { attachmentId: aid, filename: ref.filename },
-      ...auditMeta(c),
-      result: "success",
-    });
-    return c.json({ success: true, data: null });
-  });
+  router.delete(
+    "/documents/:id/attachments/:aid",
+    describeRoute({
+      tags: [TAGS.Document],
+      summary: "Delete document attachment",
+      security: SECURITY.session,
+      responses: {
+        ...jsonOk(z.null(), "Attachment deleted"),
+        ...errors(401, 403, 404),
+      },
+    }),
+    async (c) => {
+      const db = c.get("db");
+      const user = c.get("user")!;
+      const id = c.req.param("id")!;
+      const aid = c.req.param("aid")!;
+      const doc = await getDocumentById(db, id);
+      if (!doc)
+        throw new NotFoundError("Document", id);
+      const item = await resolveDocumentItem(db, id);
+      if (!item)
+        throw new NotFoundError("Document", id);
+      // Defense in depth (see GET /documents/:id).
+      await documentAccess.assert(policyContext(c)!, "document:delete_attachment", item.id);
+      const ref = await getReferenceById(db, aid);
+      if (!ref || ref.ownerType !== "item_attachment" || ref.ownerId !== item.id)
+        throw new NotFoundError("Attachment", aid);
+      await releaseReference(db, c.get("config"), { referenceId: aid });
+      await audit(db, c.get("logger"), {
+        actorId: user.id,
+        actorName: user.name,
+        action: "document.attachment_deleted",
+        resourceType: "document",
+        resourceId: id,
+        resourceName: doc.title,
+        detail: { attachmentId: aid, filename: ref.filename },
+        ...auditMeta(c),
+        result: "success",
+      });
+      return c.json({ success: true, data: null });
+    },
+  );
 
   // ── Comments + attachments (delegated to mod-item) ──
   mountItemCommentRoutes(router, {
@@ -490,55 +684,94 @@ export function documentRoutes() {
     permission: z.enum(["viewer", "editor"]).default("viewer"),
   });
 
-  router.get("/documents/:id/shares", async (c) => {
-    const db = c.get("db");
-    const id = c.req.param("id")!;
-    // This handler previously had NO in-handler check at all and leaked
-    // the (inherited) sharing graph to any authenticated user if the
-    // policy binding desynced. Resolve + assert document:manage (owner)
-    // explicitly; admin short-circuits via the bypass hook.
-    const item = await resolveDocumentItem(db, id);
-    if (!item)
-      throw new NotFoundError("Document", id);
-    await documentAccess.assert(policyContext(c)!, "document:manage", item.id);
-    const data = await listDocumentSharesWithInheritance(db, id);
-    return c.json({ success: true, data });
-  });
-
-  router.post("/documents/:id/shares", async (c) => {
-    const ctx = policyContext(c)!;
-    const id = c.req.param("id")!;
-
-    const body = shareSchema.parse(await c.req.json());
-    // The framework runs `canGrant` (owner-or-admin) and `onGranted`
-    // (audit emission) inside `documentAccess.grant()` — no manual
-    // permission check or audit call here.
-    const share = await addDocumentShare(ctx, { documentId: id, ...body });
-
-    return c.json(
-      {
-        success: true,
-        data: share,
-        note: "Share applies recursively to all descendant documents.",
+  router.get(
+    "/documents/:id/shares",
+    describeRoute({
+      tags: [TAGS.Document],
+      summary: "List document shares",
+      description: "Direct + inherited shares for a document. Owner/admin only.",
+      security: SECURITY.session,
+      responses: {
+        ...jsonOk(z.unknown(), "Shares"),
+        ...errors(401, 403, 404),
       },
-      201,
-    );
-  });
+    }),
+    async (c) => {
+      const db = c.get("db");
+      const id = c.req.param("id")!;
+      // This handler previously had NO in-handler check at all and leaked
+      // the (inherited) sharing graph to any authenticated user if the
+      // policy binding desynced. Resolve + assert document:manage (owner)
+      // explicitly; admin short-circuits via the bypass hook.
+      const item = await resolveDocumentItem(db, id);
+      if (!item)
+        throw new NotFoundError("Document", id);
+      await documentAccess.assert(policyContext(c)!, "document:manage", item.id);
+      const data = await listDocumentSharesWithInheritance(db, id);
+      return c.json({ success: true, data });
+    },
+  );
 
-  router.delete("/documents/:id/shares/:shareId", async (c) => {
-    const ctx = policyContext(c)!;
-    const id = c.req.param("id")!;
-    const shareId = c.req.param("shareId")!;
+  router.post(
+    "/documents/:id/shares",
+    describeRoute({
+      tags: [TAGS.Document],
+      summary: "Add document share",
+      description: "Grant a user/group viewer or editor access. Applies recursively to descendants.",
+      security: SECURITY.session,
+      responses: {
+        ...jsonCreated(z.unknown(), "Share created"),
+        ...errors(401, 403, 404, 409, 422),
+      },
+    }),
+    validator("json", shareSchema),
+    async (c) => {
+      const ctx = policyContext(c)!;
+      const id = c.req.param("id")!;
 
-    const share = await getDocumentShareById(c.get("db"), shareId);
-    if (!share || share.documentId !== id)
-      throw new NotFoundError("Share", shareId);
+      const body = c.req.valid("json");
+      // The framework runs `canGrant` (owner-or-admin) and `onGranted`
+      // (audit emission) inside `documentAccess.grant()` — no manual
+      // permission check or audit call here.
+      const share = await addDocumentShare(ctx, { documentId: id, ...body });
 
-    // `onRevoked` audits the removal; no manual audit emission needed.
-    await removeDocumentShare(ctx, shareId);
+      return c.json(
+        {
+          success: true,
+          data: share,
+          note: "Share applies recursively to all descendant documents.",
+        },
+        201,
+      );
+    },
+  );
 
-    return c.json({ success: true, data: null });
-  });
+  router.delete(
+    "/documents/:id/shares/:shareId",
+    describeRoute({
+      tags: [TAGS.Document],
+      summary: "Remove document share",
+      security: SECURITY.session,
+      responses: {
+        ...jsonOk(z.null(), "Share removed"),
+        ...errors(401, 403, 404),
+      },
+    }),
+    async (c) => {
+      const ctx = policyContext(c)!;
+      const id = c.req.param("id")!;
+      const shareId = c.req.param("shareId")!;
+
+      const share = await getDocumentShareById(c.get("db"), shareId);
+      if (!share || share.documentId !== id)
+        throw new NotFoundError("Share", shareId);
+
+      // `onRevoked` audits the removal; no manual audit emission needed.
+      await removeDocumentShare(ctx, shareId);
+
+      return c.json({ success: true, data: null });
+    },
+  );
 
   return router;
 }
