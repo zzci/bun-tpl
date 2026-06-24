@@ -1,8 +1,9 @@
 /* eslint-disable react-refresh/only-export-components */
 import { createLazyFileRoute } from "@tanstack/react-router";
-import { Mail, Shield, Webhook } from "lucide-react";
+import { Info, Mail, Shield, Webhook } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/shared/components/ui/tabs";
+import { AboutSettingsTab } from "./-settings-about";
 import { AuthSettingsTab } from "./-settings-auth";
 import { EncryptionSettingsTab } from "./-settings-encryption";
 import { SmtpSettingsTab } from "./-settings-smtp";
@@ -40,6 +41,10 @@ function SettingsPage() {
             <Shield className="mr-1.5 size-4" />
             {t("tabs.encryption")}
           </TabsTrigger>
+          <TabsTrigger value="about">
+            <Info className="mr-1.5 size-4" />
+            {t("tabs.about")}
+          </TabsTrigger>
         </TabsList>
 
         <TabsContent value="auth">
@@ -53,6 +58,9 @@ function SettingsPage() {
         </TabsContent>
         <TabsContent value="encryption">
           <EncryptionSettingsTab />
+        </TabsContent>
+        <TabsContent value="about">
+          <AboutSettingsTab />
         </TabsContent>
       </Tabs>
     </div>
