@@ -18,7 +18,7 @@ APP_DISPLAY_NAME=My App # human-readable display name
 ```
 
 If you set those before running `bun run dev` / `bun run build` /
-`bun run compile`, the bulk of the rebranding is done.
+`bun run package`, the bulk of the rebranding is done.
 
 ### One-shot helper
 
@@ -45,14 +45,14 @@ The rebrand helper covers:
 - `.env.example` and `.env` (top-level)
 - `examples/compose/.env.example`
 - `examples/compose/compose.yml` (the `${APP_NAME:-app}` / `${OAUTH_*:-...}` defaults)
-- `Dockerfile` (`ENV APP_NAME=app` / `ENV APP_DISPLAY_NAME=App` / the `org.opencontainers.image.title` label, if present — structural paths like `WORKDIR /app`, `useradd app`, and the compiled binary name are left alone)
+- `deploy/lode.toml` (`[global].app` and `[update].asset` / `github` — must match your release repo and the asset filename) and `docker-compose.yml` (the `${APP_NAME:-app}` default). The `Dockerfile` carries no app identity — it only bakes the lode supervisor.
 - Top-level `package.json` plus every `apps/*/package.json` and `packages/*/package.json`
 
 ### What flows from `APP_NAME`
 
 | Surface | Where |
 |---|---|
-| Static-asset URL prefix in compiled binary | `scripts/compile.ts` |
+| lode app name + release asset filename | `deploy/lode.toml`, `.github/workflows/release.yml` (`APP_NAME`) |
 | Backup download filename (`<APP_NAME>-backup-*.json`) | `apps/api/src/modules/backup/export.routes.ts`, `apps/web/src/app/routes/_app/admin/settings.lazy.tsx` |
 | Master-key download filename | `apps/web/src/app/routes/setup.tsx` |
 | Unlock-challenge `sessionStorage` key | `apps/web/src/app/routes/unlock.tsx` |
@@ -138,7 +138,7 @@ The repository splits along a clear boundary. **Template surface** is owned by u
 
 | Layer | Template surface (merge from upstream) | Your application (do not merge from upstream) |
 |---|---|---|
-| Build / runtime | `Dockerfile`, `bun.lock` (regenerate), `bunfig.toml`, `package.json` (top-level scripts), `scripts/compile.ts`, `scripts/clean.ts`, `scripts/check-i18n.ts`, `scripts/dev-dex.ts` | New scripts you add under `scripts/` |
+| Build / runtime | `Dockerfile`, `deploy/lode.toml`, `bun.lock` (regenerate), `bunfig.toml`, `package.json` (top-level scripts), `scripts/package.ts`, `scripts/clean.ts`, `scripts/check-i18n.ts`, `scripts/dev-dex.ts` | New scripts you add under `scripts/` |
 | Shared infra | `apps/api/src/shared/`, `apps/api/src/routes/`, `apps/api/src/app.ts`, `apps/api/src/db/index.ts`, `apps/api/src/config.ts`, `apps/api/src/pid-lock.ts`, `apps/api/src/dev.ts` | New shared utilities you add (still reviewed for upstream-friendly placement) |
 | Reference modules | `apps/api/src/modules/{account,audit,backup,encryption,policy,settings,system}/` | `apps/api/src/modules/{document,issue}/` once you start adding business fields, your own new modules under `apps/api/src/modules/<your-module>/` |
 | Frontend infra | `apps/web/index.html`, `apps/web/vite.config.ts`, `apps/web/src/shared/`, `apps/web/src/app/main.tsx`, `apps/web/src/app/root.tsx`, route shells under `apps/web/src/app/routes/_app/` | Module routes under `apps/web/src/app/routes/_app/<your-module>/`, your nav entries, your locale shards |

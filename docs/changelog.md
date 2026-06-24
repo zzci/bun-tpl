@@ -13,6 +13,19 @@ each upstream tag; your fork's `Unreleased` block sits at the top.
 
 ### Changed
 
+- Replaced the single-binary build (`scripts/compile.ts`) with a
+  [lode](https://github.com/dotns/lode)-compatible release asset
+  (`scripts/package.ts`): a tarball of the bundled `index.js`, SPA `dist/`,
+  Drizzle `drizzle/`, and the libsql native binding, plus `manifest.json`
+  (schema `lode/v1`) and `checksums.txt`. The app serves the SPA and runs
+  migrations from the filesystem (no embedded asset map), detects the packaged
+  layout via `ROOT_DIR`, and implements the lode `state.json` readiness/prepare
+  handshake; `/api/system/version` now reports a lode upgrade summary.
+- `Dockerfile` / `docker-compose.yml` now run the lode supervisor (it downloads,
+  verifies, runs, and auto-updates the release asset) instead of baking the app
+  into the image. `deploy/lode.toml` is the operator config template.
+- `release.yml` builds and uploads the lode asset to a published GitHub Release
+  instead of pushing a container image.
 - Group membership lives in a dedicated `group_members` table owned by the
   account module instead of `relation_tuples`. The Zanzibar engine reads
   `group:*#member` through `group-members.service` so a deployment can drop

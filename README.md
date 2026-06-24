@@ -5,7 +5,7 @@ A Bun monorepo template for OAuth-backed internal workspaces. Ships with:
 - **API** — Hono on Bun, SQLite via Drizzle, optional ECIES at-rest encryption.
 - **Web** — React 19 + TanStack Router + Tailwind v4, file-based routes, dual EN/ZH i18n.
 - **Modules** — account/auth (OAuth + TOTP), groups, Zanzibar relation tuples, `item` base + `file` storage, documents, issues, cron, settings, audit logs, encryption admin, JSON backup.
-- **Build** — single Bun executable via `scripts/compile.ts`.
+- **Build** — lode-compatible release asset (`index.js` + SPA + migrations) via `scripts/package.ts`; self-updates under the [lode](https://github.com/dotns/lode) supervisor.
 
 ## Quick start
 
@@ -61,7 +61,7 @@ bun run test:e2e       # Live e2e: dex + API + encrypted DB + every module
 bun run check          # lint + typecheck + test + build + check:i18n + check:env-docs + check:api-docs
 bun run gen:env-docs   # regenerate docs/reference/env-reference.md from the zod schema + .env.example
 bun run gen:api-docs   # regenerate docs/reference/api-routes.md from the in-process Hono routes
-bun run compile        # Single-binary build (Bun executable)
+bun run package        # Build the lode release asset (dist/<app>-<os>-<arch>.tar.gz + manifest.json + checksums.txt)
 bun run clean          # Remove build artifacts
 ```
 
@@ -74,7 +74,7 @@ packages/shared/   ECIES utilities used by both api and web
 packages/tsconfig/ Shared TS config
 docs/              Architecture, module standards, deployment, rebranding
 tests/e2e/         Live e2e harness (dex + API)
-scripts/           dev-all / dev-dex / rebrand / compile / clean / hash-password
+scripts/           dev-all / dev-dex / rebrand / package / clean / hash-password
                    / check-i18n / find-unused-i18n / clean-unused-i18n / gen-env-docs
 ```
 

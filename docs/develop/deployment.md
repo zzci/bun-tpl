@@ -2,22 +2,24 @@
 
 > Examples assume `BASE_PATH=/app`. The app is mounted at root (`/`) by default; set `BASE_PATH` to serve under a URL prefix (e.g. behind a reverse-proxy mount).
 
-The build target is a single Bun executable. Production typically pairs that with a reverse proxy and a persistent volume for the SQLite database and uploaded attachments.
+The build target is a [lode](https://github.com/dotns/lode)-compatible release asset. lode is a supervisor that downloads, verifies, runs, auto-updates, and rolls back the asset; production pairs it with a reverse proxy and a persistent volume for the SQLite database and uploaded attachments.
 
 ## Build options
 
 ```bash
-# Single binary (recommended for Linux servers)
-bun run compile
-# → dist/app  (~80–100 MB; SHA-256 written to dist/checksums.txt)
+# lode release asset (run on the same OS/arch you deploy to — Linux x64)
+bun run package
+# → dist/app-linux-x64.tar.gz   (bundled index.js + SPA dist/ + drizzle/ + libsql native binding)
+#   dist/manifest.json          (schema lode/v1: channels → version → asset)
+#   dist/checksums.txt          (SHA-256 of the tarball)
 
-# Container image
+# Container image (runs the lode supervisor, not the app directly)
 docker build -t myapp .
 ```
 
-The runtime layer uses `debian:stable-slim` by default — publicly pullable so forks `docker build` without an upstream credential dance. Override via `--build-arg RUNTIME_BASE=...` (e.g. distroless / a hardened internal base). The compiled binary embeds the frontend assets and Drizzle migrations so the runtime layer only needs glibc + the libsql native binding (already copied in) + `curl` for the HEALTHCHECK.
+The asset is a flat runtime directory: lode unpacks it, runs `bun index.js` from the version directory, and the app serves the SPA from `dist/` and runs Drizzle migrations from `drizzle/` on disk. `BUILD_COMMIT` / `BUILD_VERSION` / `BUILD_TIME` are injected at package time (from git + the release tag) so `app --version` and `/api/system/version` report the real values.
 
-Inject the source revision via `--build-arg BUILD_COMMIT=$(git rev-parse --short HEAD)` so `app --version` and `/api/system/version` report the real hash — `.git` is excluded from the build context, so the build cannot resolve it on its own. CI / release pipelines should always set this.
+The container image bakes only the lode binary on top of `oven/bun:1.3.14-debian` (override `BUN_IMAGE` / `LODE_IMAGE` build-args). The app itself is **not** in the image — lode fetches the release asset named by `deploy/lode.toml` (`[update].asset`) at runtime. See [Upgrade playbook](#upgrade-playbook) and the lode [integration guide](https://github.com/dotns/lode/blob/main/docs/integration.md).
 
 ## Required environment
 
@@ -43,18 +45,19 @@ Highlights for a production deploy:
 
 ## Volumes
 
-The container declares `VOLUME /app/data`. Inside that volume the runtime writes:
+The container declares `VOLUME /srv/lode`. That volume holds lode's own state — `lode.toml`, the downloaded `versions/`, `state.json` — **and** the app's writable data under `/srv/lode/data`.
 
-| Path | Derived from | Holds | Backup priority |
+The app **must** write its data to the volume, never to its version directory (`/srv/lode/versions/<v>/`), which lode replaces on every update. This is handled automatically: the app resolves a top-level **`DATA_DIR`** and anchors the DB, uploads, and logs under it.
+
+`DATA_DIR` resolves by the lode SDK's `dataDir()` order — explicit `DATA_DIR` → `LODE_DIR` → `ROOT_DIR` — but the lode/root dirs are used as a *base* with a `data/` subdir (`${LODE_DIR}/data`), so app state stays separate from lode's own `state.json` / `versions/`. lode injects `LODE_DIR=/srv/lode`, so app data lands at `/srv/lode/data` automatically. So **no per-path config is needed** under lode — the table below is the result:
+
+| Path (under `${DATA_DIR}` = `/srv/lode/data`) | Variable (override) | Holds | Backup priority |
 |---|---|---|---|
-| `${DB_PATH}` (default `${ROOT_DIR}/data/db/app.db`) | `DB_PATH` (or `ROOT_DIR` when unset) | `app.db`, `app.db-wal`, `app.db-shm`, `meta.db` | Critical |
-| `${FILE_STORAGE_LOCAL_ROOT}` (default `${ROOT_DIR}/data/uploads/files/`) | `FILE_STORAGE_LOCAL_ROOT` (or `ROOT_DIR` when unset) | All attachments (documents, issues, …); content-addressable blobs under the `file` module | Critical |
-| `${ROOT_DIR}/data/logs/` | `ROOT_DIR` (`LOG_FILE` may override the file path) | Runtime logs | Operational |
+| `db/app.db` | `DB_PATH` | `app.db`, `app.db-wal`, `app.db-shm`, `meta.db` | Critical |
+| `uploads/files/` | `FILE_STORAGE_LOCAL_ROOT` | All attachments (documents, issues, …); content-addressable blobs under the `file` module | Critical |
+| `logs/app.log` | `LOG_FILE` (or `LOG_TO_STDOUT=true`) | Runtime logs | Operational |
 
-**Watch out — the upload and log paths are *not* re-rooted by `DB_PATH`.** Overriding `DB_PATH` to a path outside `ROOT_DIR` does **not** relocate `data/uploads/files/` or `data/logs/` — those continue to write under `${ROOT_DIR}/data/` unless you also set `FILE_STORAGE_LOCAL_ROOT` (or `LOG_FILE`). The two safe operating modes are:
-
-1. **Recommended:** keep `ROOT_DIR=/app/data` (the Dockerfile default) and mount a single persistent volume at `/app/data`. The DB, uploads, and logs all land under it.
-2. **Advanced:** if you must split the DB onto a separate disk, set `ROOT_DIR` to the directory you actually mounted **and** set `DB_PATH` to an absolute path on the other volume. Do not assume changing only `DB_PATH` is enough.
+Set `DATA_DIR` to relocate everything at once, or an absolute `DB_PATH` / `LOG_FILE` / `FILE_STORAGE_LOCAL_ROOT` to override one. Container deploys default `LOG_TO_STDOUT=true` so logs go to the runtime rather than a file under the volume.
 
 ## Health checks
 
@@ -236,7 +239,7 @@ services:
     image: alpine:3
     restart: unless-stopped
     volumes:
-      - app-data:/app/data:ro
+      - lode-data:/srv/lode:ro
       - app-snapshots:/snapshots
     entrypoint:
       - /bin/sh
@@ -245,7 +248,7 @@ services:
         apk add --no-cache sqlite tini
         while true; do
           ts=$(date -u +%Y%m%dT%H%M%SZ)
-          sqlite3 /app/data/db/app.db ".backup '/snapshots/app-${ts}.db'"
+          sqlite3 /srv/lode/data/db/app.db ".backup '/snapshots/app-${ts}.db'"
           find /snapshots -name 'app-*.db' -mtime +7 -delete
           sleep 3600
         done
@@ -255,7 +258,7 @@ For anything past a single-tenant tool, prefer [litestream](https://litestream.i
 
 ### Logs volume
 
-Mount a separate volume for `${ROOT_DIR}/data/logs/` (or set `LOG_FILE` to a path on a dedicated volume) so log retention does not compete with DB snapshots for disk pressure.
+Prefer `LOG_TO_STDOUT=true` under lode (the version directory is swappable). If you must write to disk, set `LOG_FILE` to a path under `/srv/lode/data/logs/` (or a separate mounted volume) so log retention does not compete with DB snapshots for disk pressure.
 
 ## Logging
 
@@ -271,7 +274,7 @@ for its process lifetime; the `SIGHUP` handler in
 (`copytruncate` would race with pino's async buffer and lose lines):
 
 ```
-/app/data/logs/app.log {
+/srv/lode/data/logs/app.log {
   hourly
   rotate 168
   size 50M
@@ -313,14 +316,16 @@ The `/api/backup/export` admin endpoint produces a JSON dump of selected modules
 
 ## Upgrade playbook
 
-SQLite migrations are embedded in the binary and run on boot. The risky cases:
+Updates are driven by [lode](https://github.com/dotns/lode). To publish one: bump the version, cut a GitHub Release with a `v*` tag, and the `release` workflow builds + uploads the lode asset (`<app>-linux-x64.tar.gz` + `manifest.json` + `checksums.txt`). Each deployed lode polls its source (`deploy/lode.toml` `[update]`) on `check_interval`, then — per `policy` (`off` / `check` / `auto`) — downloads, verifies the checksum (and signature when `[trust].require_signature` is set), runs the new version, waits out `health_grace`, and **auto-rolls-back** to the last good version if the new one exits early. `keep_versions` bounds the retained versions.
+
+The SQLite migrations ship inside the asset (`drizzle/`) and run on boot of the new version. The risky schema cases:
 
 | Change | Path |
 |---|---|
-| Add table / add nullable column | Drop in. Bring up new binary; migration auto-runs. |
+| Add table / add nullable column | Drop in. lode rolls the new version in; migration auto-runs. |
 | Add NOT NULL column with default | Same — defaults apply during migration. |
-| Drop or rename column | Stop traffic, snapshot DB, deploy new binary. Drizzle's "create new table + copy + swap" runs at boot; verify size and row count after. |
-| Major schema reshuffle | Use `/api/backup/export` (still on old binary), deploy new binary, `/api/backup/import` to a fresh DB. Skip in-place migration entirely. |
+| Drop or rename column | Snapshot the DB first. Drizzle's "create new table + copy + swap" runs at boot; verify size and row count after. If it fails, lode rolls back to the prior version. |
+| Major schema reshuffle | Use `/api/backup/export` (still on the old version), publish the new release, `/api/backup/import` to a fresh DB. Skip in-place migration entirely. |
 
 Always run a restore drill (export → import on a scratch DB) before a production upgrade — it's the only way to know the schema-version locked import path is still intact.
 

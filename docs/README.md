@@ -1,7 +1,7 @@
 # Documentation
 
 A Bun monorepo template that ships an OAuth-backed full-stack workspace:
-Hono API, React 19 SPA, SQLite via Drizzle, single-binary build.
+Hono API, React 19 SPA, SQLite via Drizzle, lode-supervised release asset.
 
 The top-level [`../README.md`](../README.md) is the quick-start. This
 directory holds the long-form documentation, organised into three buckets:

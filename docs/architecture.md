@@ -44,7 +44,8 @@ The outer app serves:
 | Database | SQLite through Drizzle ORM |
 | Web | React, Vite, TanStack Router, TanStack Query |
 | Styling | Tailwind CSS |
-| Build | `scripts/compile.ts` single-binary build |
+| Build | `scripts/package.ts` lode release asset (bundled `index.js` + SPA + migrations) |
+| Updates | [lode](https://github.com/dotns/lode) supervisor — download, verify, run, auto-update, rollback |
 | Authentication | External OAuth/OIDC provider with authorization code + PKCE |
 | Authorization | Local Zanzibar-style relation tuples |
 
