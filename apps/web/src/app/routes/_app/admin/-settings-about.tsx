@@ -59,6 +59,23 @@ interface LodeStatus {
   readonly history?: readonly LodeHistoryEntry[] | null;
   readonly updateAvailable?: boolean | null;
   readonly rollbackTarget?: string | null;
+  readonly config?: LodeConfig | null;
+}
+
+interface LodeConfig {
+  readonly status?: string | null;
+  readonly app?: string | null;
+  readonly sourceType?: string | null;
+  readonly source?: string | null;
+  readonly asset?: string | null;
+  readonly channel?: string | null;
+  readonly policy?: string | null;
+  readonly checkInterval?: number | null;
+  readonly keepVersions?: number | null;
+  readonly pin?: string | null;
+  readonly requireSignature?: string | null;
+  readonly runtime?: string | null;
+  readonly runtimeVersion?: string | null;
 }
 
 type Confirmation
@@ -199,12 +216,27 @@ function LodeCard({ lode, pending, onRestart, onUpdate, onRollback, onHold }: Lo
     { label: t("about.lode.current"), value: safeText(lode?.current) },
     { label: t("about.lode.lastGood"), value: safeText(lode?.lastGood) },
     { label: t("about.lode.available"), value: safeText(lode?.available) },
-    { label: t("about.lode.channel"), value: safeText(lode?.channel) },
     { label: t("about.lode.activeVersion"), value: safeText(lode?.activeVersion) },
     { label: t("about.lode.readiness"), value: lode?.ready == null ? null : boolText(lode.ready, t) },
     { label: t("about.lode.lastCheck"), value: safeText(lode?.lastCheckAt) },
     { label: t("about.lode.lastError"), value: safeText(lode?.lastError) },
   ].filter(row => row.value != null);
+
+  const cfg = lode?.config;
+  const configRows = [
+    { label: t("about.lode.source"), value: cfg?.source ? `${cfg.sourceType ?? ""} ${cfg.source}`.trim() : null },
+    { label: t("about.lode.asset"), value: safeText(cfg?.asset) },
+    { label: t("about.lode.channel"), value: safeText(cfg?.channel) },
+    { label: t("about.lode.policy"), value: safeText(cfg?.policy) },
+    { label: t("about.lode.pin"), value: safeText(cfg?.pin) },
+    { label: t("about.lode.checkInterval"), value: cfg?.checkInterval == null ? null : t("about.lode.seconds", { n: cfg.checkInterval }) },
+    { label: t("about.lode.keepVersions"), value: cfg?.keepVersions == null ? null : String(cfg.keepVersions) },
+    { label: t("about.lode.signature"), value: safeText(cfg?.requireSignature) },
+    { label: t("about.lode.runtime"), value: cfg?.runtime ? `${cfg.runtime}${cfg.runtimeVersion ? ` ${cfg.runtimeVersion}` : ""}` : null },
+  ].filter(row => row.value != null);
+  // Show the config section when lode.toml is present (even if some fields are
+  // absent); flag a present-but-unreadable file.
+  const configProblem = cfg && cfg.status != null && cfg.status !== "available" && cfg.status !== "not_configured";
 
   return (
     <Card>
@@ -248,6 +280,13 @@ function LodeCard({ lode, pending, onRestart, onUpdate, onRollback, onHold }: Lo
         </div>
 
         <InfoSection title={t("about.lode.lifecycle")} rows={rows} />
+
+        {(configRows.length > 0 || configProblem) && (
+          <div className="space-y-2">
+            <InfoSection title={t("about.lode.config")} rows={configRows} />
+            {configProblem && <p className="text-sm text-muted-foreground">{t("about.lode.configUnavailable")}</p>}
+          </div>
+        )}
 
         {lode?.history && lode.history.length > 0 && (
           <HistorySection entries={lode.history} />

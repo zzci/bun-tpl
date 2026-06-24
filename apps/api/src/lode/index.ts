@@ -6,9 +6,13 @@
 // the thin app glue: a read-only summary for /system/version, the operator
 // actions the admin UI calls, and the boot-time readiness/prepare wiring.
 
+import type { LodeConfig } from "./config";
 import type { State } from "./sdk";
 import type { Logger } from "@/shared/lib/logger";
+import { readLodeConfig } from "./config";
 import { activeVersion, isSupervised, Lode, readiness } from "./sdk";
+
+export type { LodeConfig, LodeConfigStatus } from "./config";
 
 // ─── Types ───
 
@@ -45,6 +49,8 @@ export interface LodeSummary {
   readonly updateAvailable: boolean;
   /** The version a rollback would target (last_good, when it differs from current). */
   readonly rollbackTarget?: string;
+  /** Operator config read from lode.toml (update source / policy / signing). */
+  readonly config: LodeConfig;
 }
 
 export type LodeActionStatus = "ok" | "not_active" | "no_target";
@@ -205,6 +211,7 @@ export function getLodeSummary(): LodeSummary {
     history: toHistory(state?.history ?? []),
     updateAvailable: !!available && available !== current,
     ...(lastGood && lastGood !== current ? { rollbackTarget: lastGood } : {}),
+    config: readLodeConfig(),
   };
 }
 
