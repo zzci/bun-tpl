@@ -113,11 +113,11 @@ async function runMigrateSubcommand(opts: { check?: boolean }): Promise<number> 
  * gives the operator the list of migration tags the binary believes are
  * "the new world"; comparing against the DB happens at boot via the
  * regular migrator, so any divergence shows up there. Returning `null`
- * means the journal could not be read (compiled binary without
- * filesystem access).
+ * means the journal could not be read (for example, a packaged release
+ * missing its drizzle/ folder).
  */
 function listFsPendingMigrations(): string[] | null {
-  const fsMigrationsFolder = resolve(ROOT_DIR, "apps/api/drizzle");
+  const fsMigrationsFolder = resolveMigrationsFolder();
   const journalPath = resolve(fsMigrationsFolder, "meta/_journal.json");
   if (!existsSync(journalPath))
     return null;
@@ -136,4 +136,16 @@ function listFsPendingMigrations(): string[] | null {
   catch {
     return null;
   }
+}
+
+/**
+ * Locate the Drizzle migrations folder for both layouts: a packaged lode
+ * artifact ships `drizzle/` at ROOT_DIR (next to index.js); the dev/source
+ * tree keeps it under `apps/api/drizzle`.
+ */
+function resolveMigrationsFolder(): string {
+  const packaged = resolve(ROOT_DIR, "drizzle");
+  if (existsSync(resolve(packaged, "meta/_journal.json")))
+    return packaged;
+  return resolve(ROOT_DIR, "apps/api/drizzle");
 }

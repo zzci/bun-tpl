@@ -29,9 +29,27 @@ export type { Config } from "./config/schema";
 
 const RE_SLASH_TRIM = /^\/+|\/+$/g;
 const RE_DB_SUFFIX = /\.db$/;
+const RE_DATA_PREFIX = /^data\//;
 
 function resolvePath(p: string): string {
   return p.startsWith("/") ? p : resolve(ROOT_DIR, p);
+}
+
+// Persistent-data root. DATA_DIR is the data dir itself; LODE_DIR / ROOT_DIR are
+// only locators — data is anchored at `${base}/data` so it never scatters beside
+// lode's own state.json / versions/. Order: DATA_DIR > LODE_DIR > ROOT_DIR.
+function resolveDataDir(value: string | undefined): string {
+  if (value)
+    return resolvePath(value);
+  return resolve(Bun.env.LODE_DIR ?? ROOT_DIR, "data");
+}
+
+// Anchor a writable path under dataDir; an absolute value overrides. The
+// defaults' `data/` prefix is stripped so a concrete DATA_DIR isn't doubled.
+function resolveMutablePath(value: string, dataDir: string): string {
+  if (value.startsWith("/"))
+    return value;
+  return resolve(dataDir, value.replace(RE_DATA_PREFIX, ""));
 }
 
 /**
@@ -67,8 +85,15 @@ export async function loadConfigStrict(
   // cache so a deploy that boots while the IdP is degraded still serves
   // traffic with the last-known-good endpoints. A successful refresh
   // updates the cache for next boot.
+  // Anchor DB / logs / uploads under the resolved data root so one setting
+  // relocates them all — vital under lode, where data must survive version swaps.
+  const dataDir = resolveDataDir(data.DATA_DIR);
+  const dbPath = resolveMutablePath(data.DB_PATH, dataDir);
+  const logFile = resolveMutablePath(data.LOG_FILE, dataDir);
+  const localStorageRoot = resolveMutablePath(data.FILE_STORAGE_LOCAL_ROOT, dataDir);
+
   if ((!data.OAUTH_AUTHORIZE_URL || !data.OAUTH_TOKEN_URL || !data.OAUTH_USERINFO_URL) && data.OAUTH_ISSUER) {
-    const cachePath = resolvePath(`${data.DB_PATH.replace(RE_DB_SUFFIX, "")}-oidc.json`);
+    const cachePath = `${dbPath.replace(RE_DB_SUFFIX, "")}-oidc.json`;
     const { discovery, warnings } = await resolveOidcDiscovery({ issuer: data.OAUTH_ISSUER, cachePath });
     for (const w of warnings)
       warn(w);
@@ -86,8 +111,10 @@ export async function loadConfigStrict(
   return {
     ...data,
     BASE_PATH: basePath,
-    DB_PATH: resolvePath(data.DB_PATH),
-    LOG_FILE: resolvePath(data.LOG_FILE),
+    DATA_DIR: dataDir,
+    DB_PATH: dbPath,
+    LOG_FILE: logFile,
+    FILE_STORAGE_LOCAL_ROOT: localStorageRoot,
   };
 }
 

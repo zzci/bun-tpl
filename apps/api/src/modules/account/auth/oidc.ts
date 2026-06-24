@@ -1,7 +1,7 @@
 /**
  * OIDC client wrapper around `oauth4webapi` (panva). Direct IETF-spec
  * primitives — fewer layers than `openid-client`, zero deps, pure Web API
- * (fetch / SubtleCrypto). Better fit for our Bun + single-binary build.
+ * (fetch / SubtleCrypto). Better fit for our Bun runtime bundle.
  *
  * Replaces hand-rolled PKCE / token / refresh / revocation code, gaining:
  *

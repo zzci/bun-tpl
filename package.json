@@ -33,7 +33,7 @@
     "check:api-docs": "bun run --filter @app/api check:api-docs",
     "gen:env-docs": "bun scripts/gen-env-docs.ts",
     "gen:api-docs": "bun run --filter @app/api gen:api-docs",
-    "compile": "bun scripts/compile.ts",
+    "package": "bun scripts/package.ts",
     "clean": "bun scripts/clean.ts",
     "clean:all": "bun scripts/clean.ts --all",
     "rebrand": "bun scripts/rebrand.ts",

@@ -6,6 +6,13 @@
 # your real IdP, replace the Caddyfile with your TLS-terminating config,
 # and inject real secrets via your platform's secret store.
 #
+# The `app` service runs the lode supervisor (see the repo Dockerfile). lode
+# downloads the published release named in `deploy/lode.toml` (`[update]`),
+# verifies it, runs `bun index.js`, and auto-updates. NOTE: it fetches the
+# GitHub release, NOT your local working tree — to smoke-test local changes use
+# `bun run dev:all`, or publish a release / point `[update].manifest` at a
+# locally-served manifest.
+#
 # Bring up (from this directory):
 #   docker compose up --build
 # Tear down:
@@ -19,7 +26,7 @@
 services:
   app:
     build:
-      # Build the production image from the repo root. Path is relative to
+      # Build the lode runtime image from the repo root. Path is relative to
       # this compose file (examples/compose/compose.yml -> ../..).
       context: ../..
       dockerfile: Dockerfile
@@ -32,8 +39,9 @@ services:
       APP_NAME: ${APP_NAME:-app}
       APP_DISPLAY_NAME: ${APP_DISPLAY_NAME:-App}
       BASE_PATH: ${BASE_PATH:-}
-      DB_PATH: /app/data/db/app.db
-      LOG_FILE: /app/data/logs/app.log
+      # Data auto-anchors at ${LODE_DIR}/data = /srv/lode/data (the volume),
+      # not the swappable version directory. Set DATA_DIR to override.
+      LOG_TO_STDOUT: "true"
       DB_ENCRYPTION: ${DB_ENCRYPTION:-true}
       APP_URL: ${APP_URL:-http://localhost}
       CORS_ORIGIN: ${CORS_ORIGIN:-http://localhost}
@@ -47,7 +55,9 @@ services:
       SERVICE_TOKEN_METRICS: ${SERVICE_TOKEN_METRICS:-}
       SERVICE_TOKEN_BACKUP: ${SERVICE_TOKEN_BACKUP:-}
     volumes:
-      - app-data:/app/data
+      - lode-data:/srv/lode
+      # lode operator config (release source + update policy).
+      - ../../deploy/lode.toml:/srv/lode/lode.toml:ro
     expose:
       - "3000"
     depends_on:
@@ -93,6 +103,6 @@ services:
       - dex
 
 volumes:
-  app-data:
+  lode-data:
   caddy-data:
   caddy-config:

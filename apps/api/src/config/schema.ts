@@ -19,6 +19,12 @@ export const configSchema = z.object({
   NODE_ENV: z.enum(["development", "production", "test"]).default("development"),
   PORT: z.coerce.number().int().min(1).max(65535).default(3000),
   HOST: z.string().default("0.0.0.0"),
+  // Top-level directory for persistent data (DB, uploads, logs). The relative
+  // `data/`-prefixed defaults of DB_PATH / LOG_FILE / FILE_STORAGE_LOCAL_ROOT
+  // anchors them. When unset, data lives at `${LODE_DIR}/data` (under lode) or
+  // `${ROOT_DIR}/data` (standalone) — LODE_DIR/ROOT_DIR are locators, DATA_DIR is
+  // the dir itself. An absolute DB_PATH / LOG_FILE / FILE_STORAGE_LOCAL_ROOT wins.
+  DATA_DIR: z.string().optional(),
   DB_PATH: z.string().default("data/db/app.db"),
   DB_ENCRYPTION: z.enum(["true", "false"]).default("false").transform(v => v === "true"),
   // Application slug — lowercase letters, digits, dashes. Used as the

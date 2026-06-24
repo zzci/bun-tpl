@@ -1,7 +1,10 @@
+import type { LodePrepareWatcher } from "./lode";
 import process from "node:process";
+import { sql } from "drizzle-orm";
 import { bootstrap } from "./app";
 import { BUILD_INFO } from "./build-info";
 import { dispatchCliSubcommand } from "./cli";
+import { captureLodeConfigBaseline, reportLodeServing, startLodePrepareWatcher } from "./lode";
 import { stopAuditRetentionSweep } from "./modules/audit";
 import { stopCron } from "./modules/cron";
 import { stopFileGcSweep } from "./modules/file";
@@ -13,7 +16,7 @@ import { attemptSealedUnlock } from "./sealed-unlock";
   if (subcommandExit !== null) {
     process.exit(subcommandExit);
   }
-  const { fetch, config, logger, closeDb } = await bootstrap();
+  const { fetch, config, logger, db, closeDb } = await bootstrap();
   logger.info({ ...BUILD_INFO }, "build info");
 
   // Bind the port before acquiring the PID lock so a concurrent boot loses
@@ -38,6 +41,7 @@ import { attemptSealedUnlock } from "./sealed-unlock";
   }
 
   let shuttingDown = false;
+  let lodePrepare: LodePrepareWatcher | undefined;
 
   // Unified teardown for signals, pid-lock failure, and fatal exceptions.
   // fatal=true: immediate stop, silent per-step errors (logger may be gone),
@@ -73,6 +77,7 @@ import { attemptSealedUnlock } from "./sealed-unlock";
       };
 
     await safe("server.stop", stopServer, silent);
+    await safe("stopLodePrepareWatcher", () => lodePrepare?.stop(), silent);
     await safe("stopAuditRetentionSweep", stopAuditRetentionSweep, silent);
     await safe("stopFileGcSweep", stopFileGcSweep, silent);
     await safe("stopCron", stopCron, silent);
@@ -97,6 +102,44 @@ import { attemptSealedUnlock } from "./sealed-unlock";
   // Optional sealed-file unlock for unattended restarts. Fires once,
   // best-effort, and always deletes the file regardless of outcome.
   void attemptSealedUnlock(config, logger);
+
+  // Lode upgrade integration. No-op unless running under the lode supervisor.
+  try {
+    // Report serving to lode. When the DB is open, gate the signal on it
+    // answering so `state.ready` reflects real readiness; when the app boots
+    // encryption-locked (no DB), it still serves the unlock UI, so report
+    // ready unconditionally. Writing phase -0 opts into the prepare handshake.
+    await reportLodeServing({
+      logger,
+      // Omit the probe entirely when locked (exactOptionalPropertyTypes
+      // rejects an explicit `undefined`); no probe means report ready as soon
+      // as the server is up — correct, since a locked app serves the unlock UI.
+      ...(db
+        ? {
+            probe: async () => {
+              await db.run(sql`SELECT 1`);
+              return true;
+            },
+          }
+        : {}),
+    });
+    // Snapshot lode's config generation now so a later lode.toml edit shows up
+    // as "config changed — restart to apply" in the admin About panel.
+    captureLodeConfigBaseline();
+    // Handle lode's staged-update prompt: checkpoint the WAL and flush logs
+    // before acking, so the next version starts from a consolidated DB file.
+    lodePrepare = startLodePrepareWatcher({
+      logger,
+      onPrepare: async () => {
+        await db?.checkpoint();
+        await logger.flush();
+      },
+    });
+  }
+  catch (err) {
+    await closeServices({ reason: "lode readiness failed", fatal: true, err });
+    return;
+  }
 
   process.on("SIGINT", () => {
     void closeServices({ reason: "SIGINT", fatal: false });

@@ -41,6 +41,12 @@ export interface BootstrapResult {
   readonly config: Config;
   /** Logger */
   readonly logger: Logger;
+  /**
+   * The live database handle at boot, or `undefined` when the app starts
+   * encryption-locked (no DB until unlocked). Used by the lode readiness
+   * probe and prepare handshake in index.ts.
+   */
+  readonly db?: AppDatabase;
   /** Close DB connection (if unlocked). Call on shutdown. */
   readonly closeDb: () => Promise<void>;
 }
@@ -64,11 +70,15 @@ export async function bootstrap(): Promise<BootstrapResult> {
   // Mutable reference for hot-swapping locked → unlocked
   let currentApp: { fetch: (req: Request, env?: Record<string, unknown>) => Response | Promise<Response> };
   let closeDb: () => Promise<void> = async () => {};
+  // Live DB handle, exposed to index.ts for the lode readiness probe. Stays
+  // undefined while the app is locked; set once the DB is unlocked/opened.
+  let currentDb: AppDatabase | undefined;
 
   async function onDbReady(db: AppDatabase) {
     // Close the previous database handle (no-op on first call) so DEK rotation
     // can hot-swap the live db without leaking the old encrypted handle.
     await closeDb();
+    currentDb = db;
     currentApp = await buildFullApp({ config, db, logger, encryption });
     logDefaultAdmins(await getAuthConfig(db, config), logger);
     closeDb = async () => {
@@ -90,6 +100,7 @@ export async function bootstrap(): Promise<BootstrapResult> {
     fetch: (req, env) => currentApp.fetch(req, env),
     config,
     logger,
+    db: currentDb,
     closeDb: () => closeDb(),
   } as BootstrapResult;
 }

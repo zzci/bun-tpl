@@ -1,5 +1,7 @@
 import type { Context } from "hono";
-import { staticAssets } from "../static-assets";
+import { existsSync, statSync } from "node:fs";
+import { isAbsolute, relative, resolve } from "node:path";
+import { ROOT_DIR } from "../../root";
 
 // Vite emits hashed filenames for JS/CSS/asset bundles (e.g. `app-d4a91f.js`,
 // `style-aa11bb.css`, fonts), which are content-addressed and safe to pin
@@ -10,13 +12,13 @@ import { staticAssets } from "../static-assets";
 const HASHED_ASSET_RE = /\.[a-f0-9]{8,}\.(?:js|css|woff2?|ttf|otf|svg|png|jpe?g|gif|ico|webp|map)$/i;
 const IMMUTABLE_CACHE = "public, max-age=31536000, immutable";
 const REVALIDATE_CACHE = "no-cache";
+const STATIC_ROOT = resolveStaticRoot();
 
 export function serveStaticAssets(basePath: string) {
-  const indexKey = `${basePath}/index.html`;
   return async (c: Context) => {
     const path = new URL(c.req.url).pathname;
-    const direct = staticAssets.get(path);
-    const asset = direct ?? staticAssets.get(indexKey);
+    const direct = resolveStaticAsset(requestPathToAsset(path, basePath));
+    const asset = direct ?? resolveStaticAsset("index.html");
     if (!asset) {
       return c.notFound();
     }
@@ -33,5 +35,45 @@ export function serveStaticAssets(basePath: string) {
 }
 
 export function hasStaticAssets(): boolean {
-  return staticAssets.size > 0;
+  return isFile(resolve(STATIC_ROOT, "index.html"));
+}
+
+function resolveStaticRoot(): string {
+  const packaged = resolve(ROOT_DIR, "dist");
+  if (isFile(resolve(packaged, "index.html")))
+    return packaged;
+  return resolve(ROOT_DIR, "apps/web/dist");
+}
+
+function requestPathToAsset(path: string, basePath: string): string {
+  let assetPath = path;
+  if (basePath !== "") {
+    if (assetPath === basePath || assetPath === `${basePath}/`)
+      return "index.html";
+    if (assetPath.startsWith(`${basePath}/`))
+      assetPath = assetPath.slice(basePath.length + 1);
+  }
+  try {
+    return decodeURIComponent(assetPath.replace(/^\/+/, "")) || "index.html";
+  }
+  catch {
+    return "index.html";
+  }
+}
+
+function resolveStaticAsset(assetPath: string): string | null {
+  const candidate = resolve(STATIC_ROOT, assetPath);
+  const rel = relative(STATIC_ROOT, candidate);
+  if (rel.startsWith("..") || isAbsolute(rel))
+    return null;
+  return isFile(candidate) ? candidate : null;
+}
+
+function isFile(path: string): boolean {
+  try {
+    return existsSync(path) && statSync(path).isFile();
+  }
+  catch {
+    return false;
+  }
 }

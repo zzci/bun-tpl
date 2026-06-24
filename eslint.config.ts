@@ -20,6 +20,7 @@ export default antfu({
     "**/*.yml",
     "**/*.yaml",
     "apps/api/drizzle/**",
+    "apps/api/src/lode/sdk.ts",
     "apps/web/src/shared/components/ui/**",
     "apps/web/src/app/routeTree.gen.ts",
   ],
