@@ -61,19 +61,7 @@ jobs:
         env:
           MIN_LINE: "80"
           MIN_FUNC: "70"
-        run: |
-          set -euo pipefail
-          bun --env-file=/dev/null test --coverage 2>&1 | tee /tmp/cov.txt
-          # "All files | <func%> | <line%> |"
-          line="$(grep -E '^All files' /tmp/cov.txt | tail -1 | awk -F'|' '{gsub(/ /,"",$3); print $3}')"
-          func="$(grep -E '^All files' /tmp/cov.txt | tail -1 | awk -F'|' '{gsub(/ /,"",$2); print $2}')"
-          echo "Measured: lines=${line}% functions=${func}% (floor: lines>=${MIN_LINE}% functions>=${MIN_FUNC}%)"
-          awk -v l="$line" -v f="$func" -v ml="$MIN_LINE" -v mf="$MIN_FUNC" 'BEGIN{
-            if (l=="" || f=="") { print "::error::could not parse coverage from text reporter"; exit 1 }
-            if (l+0 < ml+0) { printf "::error::line coverage %.2f%% below floor %s%%\n", l, ml; exit 1 }
-            if (f+0 < mf+0) { printf "::error::function coverage %.2f%% below floor %s%%\n", f, mf; exit 1 }
-            print "coverage gate passed"
-          }'
+        run: bash ../../scripts/ci/coverage-gate.sh
 
       - name: Upload coverage
         if: matrix.os == 'ubuntu-latest'
@@ -156,13 +144,14 @@ jobs:
 
       - uses: docker/setup-buildx-action@v4
 
+      # The image now runs lode (the app is no longer baked in — lode downloads
+      # the release asset at runtime), so the build is just the lode + bun base.
       - name: Build image (no push)
         uses: docker/build-push-action@v7
         with:
           context: .
           push: false
           load: true
-          build-args: BUILD_COMMIT=${{ github.sha }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
           tags: app:ci-${{ github.sha }}
@@ -171,6 +160,7 @@ jobs:
         uses: aquasecurity/trivy-action@v0.36.0
         with:
           image-ref: app:ci-${{ github.sha }}
+          scanners: vuln
           severity: HIGH,CRITICAL
           exit-code: "1"
           ignore-unfixed: true
