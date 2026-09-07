@@ -19,7 +19,7 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "@noble/secp256k1": "3.1.0"
+    "@noble/secp256k1": "3.2.0"
   },
   "devDependencies": {
     "@app/tsconfig": "workspace:*",
