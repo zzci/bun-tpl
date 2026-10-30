@@ -19,6 +19,15 @@ each upstream tag; your fork's `Unreleased` block sits at the top.
   bunfig `coverageThreshold` (1.4.2 only printed the table), so
   `apps/api/bunfig.toml`'s line 85% / function 70% now fails the api suite;
   it measures lines 88.42% / functions 84.26% today.
+  The CI coverage gate's line floor moves from 80% to 85% to match, so the
+  gate and `bun test` fail at the same point.
+
+- Dependencies to their latest patch/minor: `hono` 4.13.14, `wrangler`
+  4.155.0, `@cloudflare/workers-types` 5.20261029.1, `@milkdown/kit` /
+  `@milkdown/react` 7.23.0, `@tanstack/react-query` 5.105.0, `i18next`
+  26.5.11, `react-i18next` 17.1.9, `lucide-react` 1.64.0. Verified on Node
+  24.22.1 + Bun 1.4.4 with `bun run check`, `workers:build` and the three
+  Workers smoke runs.
 
 ## v0.2.0 — 2026-10-24
 

@@ -53,14 +53,14 @@ jobs:
       # documented floor explicit and logs the measured numbers. We parse
       # the text reporter's "All files" row (which honours
       # `apps/api/bunfig.toml`'s coveragePathIgnorePatterns) and fail below the
-      # realistic floor documented in the root bunfig.toml. Linux only — the
-      # gate is deterministic across OSes, one run is sufficient and keeps the
-      # macOS leg fast.
+      # floor documented in the root bunfig.toml (= apps/api/bunfig.toml's
+      # threshold). Linux only — the gate is deterministic across OSes, one
+      # run is sufficient and keeps the macOS leg fast.
       - name: Coverage gate
         if: matrix.os == 'ubuntu-26.04'
         working-directory: apps/api
         env:
-          MIN_LINE: "80"
+          MIN_LINE: "85"
           MIN_FUNC: "70"
         run: bash ../../scripts/ci/coverage-gate.sh
 

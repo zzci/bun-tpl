@@ -15,12 +15,12 @@ shell = "system"
 # and fails the build if the text-reporter "All files" row drops below the
 # floor below.
 #
-# Measured baseline 2026-09-15 (full api suite, 598 tests, 0 fail), text
-# reporter "All files" (honours `coveragePathIgnorePatterns`):
-#   lines 88.06%, functions 81.92%.
-# Realistic ratchet floor (just below baseline, ~3pt headroom for per-run
-# variance — passes today, blocks regression, never lowered to make red pass):
-#   line >= 80, function >= 70
+# Measured baseline 2026-10-24 (full api suite, 828 tests, 0 fail, Bun 1.4.4),
+# text reporter "All files" (honours `coveragePathIgnorePatterns`):
+#   lines 88.42%, functions 84.26%.
+# Ratchet floor — the same as `apps/api/bunfig.toml`'s threshold, so the CI
+# gate and `bun test` fail at the same point (never lowered to make red pass):
+#   line >= 85, function >= 70
 [test]
 coverage = true
-coverageThreshold = { line = 0.80, function = 0.70 }
+coverageThreshold = { line = 0.85, function = 0.70 }
