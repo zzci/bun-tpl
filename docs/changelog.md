@@ -65,6 +65,10 @@ each upstream tag; your fork's `Unreleased` block sits at the top.
   a warning.
 - `SERVICE_TOKEN` comparison hashes both sides before the constant-time
   compare, so a mismatch no longer leaks the configured token's length.
+- With `TRUSTED_PROXY_IPS` set, a request whose socket peer cannot be
+  resolved no longer has its forwarding headers trusted; on Bun,
+  `CF-Connecting-IP` is never taken as the peer (it is only on Workers,
+  where the edge owns it).
 
 ## v0.2.0 — 2026-10-24
 

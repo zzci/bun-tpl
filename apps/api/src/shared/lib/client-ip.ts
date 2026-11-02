@@ -1,4 +1,5 @@
 import type { Context } from "hono";
+import { getPlatform } from "@/platform";
 
 const RE_COMMA_SPLIT = /\s*,\s*/;
 const RE_BAD_PEER = /^(?:unknown|::)$/i;
@@ -36,11 +37,14 @@ interface ClientIpConfig {
  * from any peer so local proxy setups stay testable.
  */
 export function getClientIp(c: Context, config: ClientIpConfig): string {
-  // `c.env.IP.address` is Bun's connection peer. On Cloudflare the edge
-  // sets `CF-Connecting-IP` and overwrites any client-supplied value, so it
-  // plays the same role: an unspoofable peer identity that does not depend
-  // on TRUST_PROXY.
-  const peerIp = c.env?.IP?.address ?? c.req.header("cf-connecting-ip");
+  // `c.env.IP.address` is Bun's connection peer. On Cloudflare Workers the
+  // edge sets `CF-Connecting-IP` and overwrites any client-supplied value, so
+  // it plays the same role there. Anywhere else nothing strips that header,
+  // so it never stands in for the peer.
+  const peerIp = c.env?.IP?.address
+    ?? (getPlatform().name === "workers"
+      ? c.req.header("cf-connecting-ip")
+      : undefined);
 
   if (!config.TRUST_PROXY) {
     return peerIp ?? "unknown";
@@ -62,9 +66,10 @@ export function getClientIp(c: Context, config: ClientIpConfig): string {
   // forwarding headers from an unknown peer are dropped on the floor
   // (returns the peer itself). This stops a misconfigured `TRUST_PROXY`
   // (e.g. exposed to the open internet without a proxy in front of it)
-  // from letting any caller forge a client IP.
-  if (proxyAllowList.length > 0 && peerIp && !isAllowedPeer(peerIp, proxyAllowList)) {
-    return peerIp;
+  // from letting any caller forge a client IP. A peer that cannot be
+  // resolved cannot be on the list either.
+  if (proxyAllowList.length > 0 && (!peerIp || !isAllowedPeer(peerIp, proxyAllowList))) {
+    return peerIp ?? "unknown";
   }
 
   const headers = c.req.header();

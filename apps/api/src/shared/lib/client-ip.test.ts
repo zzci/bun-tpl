@@ -1,6 +1,17 @@
 import type { Context } from "hono";
-import { describe, expect, test } from "bun:test";
+import { afterEach, describe, expect, test } from "bun:test";
+import { __resetPlatformForTests, getPlatform, setPlatform } from "@/platform";
 import { getClientIp, isSpoofableProxyConfig } from "./client-ip";
+
+afterEach(() => __resetPlatformForTests());
+
+/** Run under the Workers adapter, where the edge owns CF-Connecting-IP. */
+function onWorkers(): void {
+  setPlatform({
+    ...getPlatform(),
+    name: "workers",
+  });
+}
 
 function ctx(headers: Record<string, string | undefined>, env?: Record<string, unknown>): Context {
   return {
@@ -64,8 +75,15 @@ describe("getClientIp (default — TRUST_PROXY=false)", () => {
     expect(getClientIp(ctx({}, {}), cfg)).toBe("unknown");
   });
 
-  test("falls back to CF-Connecting-IP when the runtime exposes no socket", () => {
+  test("falls back to CF-Connecting-IP on Workers, which exposes no socket", () => {
+    onWorkers();
     expect(getClientIp(ctx({ "cf-connecting-ip": "198.51.100.7" }, {}), cfg)).toBe("198.51.100.7");
+  });
+
+  test("ignores CF-Connecting-IP on Bun even when the socket peer is missing", () => {
+    // Off Cloudflare nothing strips a client-supplied CF-Connecting-IP, so it
+    // must never stand in for the peer.
+    expect(getClientIp(ctx({ "cf-connecting-ip": "198.51.100.7" }, {}), cfg)).toBe("unknown");
   });
 });
 
@@ -156,9 +174,10 @@ describe("getClientIp (TRUST_PROXY=true)", () => {
     ).toBe("10.0.0.9");
   });
 
-  test("uses CF-Connecting-IP as the peer when the runtime exposes no socket", () => {
+  test("uses CF-Connecting-IP as the peer on Workers, which exposes no socket", () => {
     // Cloudflare Workers: there is no `c.env.IP`, and the edge overwrites
     // CF-Connecting-IP on every request, so it is the trustworthy peer.
+    onWorkers();
     expect(getClientIp(ctx({ "cf-connecting-ip": "198.51.100.7" }, {}), { TRUST_PROXY: true })).toBe("198.51.100.7");
   });
 });
@@ -424,6 +443,15 @@ describe("getClientIp (production fail-closed — TRUST_PROXY=true, empty allow-
 
   test("returns 'unknown' when no socket peer IP is available", () => {
     expect(getClientIp(ctx({ "x-forwarded-for": "203.0.113.5" }, {}), prodCfg)).toBe("unknown");
+  });
+
+  test("a forged CF-Connecting-IP on Bun cannot pass the allow-list as the peer", () => {
+    expect(
+      getClientIp(
+        ctx({ "cf-connecting-ip": "10.0.0.1", "x-forwarded-for": "203.0.113.5" }, {}),
+        { ...prodCfg, TRUSTED_PROXY_IPS: "10.0.0.0/8" },
+      ),
+    ).toBe("unknown");
   });
 
   test("an all-invalid allow-list still fails closed in production", () => {
