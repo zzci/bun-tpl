@@ -11,7 +11,23 @@ each upstream tag; your fork's `Unreleased` block sits at the top.
 
 ## Unreleased
 
+### Added
+
+- `HTTP_LOG_LEVEL` (`debug` / `info` / `silent`, default `info`) sets the
+  level of the per-request access line for 2xx/3xx responses. 4xx lines are
+  always logged at `warn` and 5xx at `error`, whatever the setting.
+- `TRUSTED_PROXY_IPS` accepts IPv6 addresses and CIDR ranges.
+- `RequestEnv`, a structural Hono env constraint; `errorHandler` is generic
+  over it, so sub-apps with a narrowed env can attach it.
+
 ### Changed
+
+- Behind `TRUST_PROXY=true`, `CF-Connecting-IP` / `True-Client-IP` now take
+  priority over `X-Forwarded-For` when resolving the client IP, so a
+  Cloudflare → reverse proxy → app chain sees the visitor, not the edge.
+- The unhandled-error log line carries `method`, `path` and `requestId`.
+- `createLogger(config, { sync: true })` writes synchronously, for CLI paths
+  that exit right after logging.
 
 - Bun 1.4.2 → 1.4.4 across every pin: the ci, workers and release workflows,
   the runtime image base (`oven/bun:1.4.4-debian`), `deploy/lode.toml`'s
@@ -28,6 +44,27 @@ each upstream tag; your fork's `Unreleased` block sits at the top.
   26.5.11, `react-i18next` 17.1.9, `lucide-react` 1.64.0. Verified on Node
   24.22.1 + Bun 1.4.4 with `bun run check`, `workers:build` and the three
   Workers smoke runs.
+
+### Fixed
+
+- Shutdown drains in-flight requests before closing connections. It used to
+  call `server.stop(true)` first, which closed active connections at once and
+  made the 25-second grace period a no-op.
+- Vite's `name-<8 url-safe chars>.js` assets get the immutable cache header;
+  only dot-separated hex hashes matched before, so every bundle revalidated.
+
+### Security
+
+- **Breaking for proxied production deploys:** with `TRUST_PROXY=true` and an
+  empty `TRUSTED_PROXY_IPS`, production now ignores forwarding headers and
+  uses the socket peer, so a direct caller cannot forge its IP. Set
+  `TRUSTED_PROXY_IPS` to your proxy's address range to keep reading them.
+- **Breaking for production without an origin:** CSRF rejects mutating
+  requests in production when neither `CORS_ORIGIN` nor `APP_URL` is set,
+  instead of skipping the origin check. Development stays permissive and logs
+  a warning.
+- `SERVICE_TOKEN` comparison hashes both sides before the constant-time
+  compare, so a mismatch no longer leaks the configured token's length.
 
 ## v0.2.0 — 2026-10-24
 

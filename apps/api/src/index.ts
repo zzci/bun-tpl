@@ -10,6 +10,7 @@ import { stopCron } from "./modules/cron";
 import { stopFileGcSweep } from "./modules/file";
 import { acquirePidLock, releasePidLock } from "./pid-lock";
 import { attemptSealedUnlock } from "./sealed-unlock";
+import { drainHttpServer } from "./shared/lib/http-shutdown";
 
 (async () => {
   const subcommandExit = await dispatchCliSubcommand(process.argv);
@@ -67,16 +68,7 @@ import { attemptSealedUnlock } from "./sealed-unlock";
     // then hard-stop in case the soft stop didn't finish.
     const stopServer = opts.fatal
       ? () => server.stop(true)
-      : async () => {
-        await Promise.race([
-          server.stop(true),
-          new Promise<void>(resolve => setTimeout(resolve, 25_000).unref?.()),
-        ]);
-        try {
-          server.stop(false);
-        }
-        catch {}
-      };
+      : () => drainHttpServer(server);
 
     await safe("server.stop", stopServer, silent);
     await safe("stopLodePrepareWatcher", () => lodePrepare?.stop(), silent);

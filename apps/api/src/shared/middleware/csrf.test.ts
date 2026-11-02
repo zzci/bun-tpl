@@ -4,10 +4,10 @@ import { describe, expect, test } from "bun:test";
 import { Hono } from "hono";
 import { csrfGuard } from "./csrf";
 
-function buildApp(corsOrigin?: string, appUrl?: string) {
+function buildApp(corsOrigin?: string, appUrl?: string, nodeEnv?: string) {
   const app = new Hono<AppEnv>();
   app.use("*", async (c, next) => {
-    c.set("config", { CORS_ORIGIN: corsOrigin, APP_URL: appUrl } as Config);
+    c.set("config", { CORS_ORIGIN: corsOrigin, APP_URL: appUrl, NODE_ENV: nodeEnv } as Config);
     return next();
   });
   app.use("*", csrfGuard);
@@ -56,6 +56,24 @@ describe("csrfGuard", () => {
       headers: { "X-Requested-With": "XMLHttpRequest" },
     });
     expect(res.status).toBe(200);
+  });
+
+  test("production + no CORS_ORIGIN / no APP_URL: rejects mutating requests (fail closed)", async () => {
+    const app = buildApp(undefined, undefined, "production");
+    const res = await app.request("/p", {
+      method: "POST",
+      headers: { "X-Requested-With": "XMLHttpRequest" },
+    });
+    expect(res.status).toBe(403);
+    expect((await res.json() as { error: { code: string } }).error.code).toBe("CSRF_REJECTED");
+  });
+
+  test("production + no allowed origins: safe methods still pass", async () => {
+    const app = buildApp(undefined, undefined, "production");
+    for (const method of ["GET", "HEAD", "OPTIONS"]) {
+      const res = await app.request("/p", { method });
+      expect(res.status).not.toBe(403);
+    }
   });
 
   test("APP_URL fallback: rejects when Origin does not match APP_URL", async () => {

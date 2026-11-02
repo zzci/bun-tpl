@@ -36,6 +36,7 @@ function baseConfig(overrides: Partial<Config> = {}): Config {
     LOG_LEVEL: "info",
     LOG_FILE: "data/logs/app.log",
     LOG_TO_STDOUT: false,
+    HTTP_LOG_LEVEL: "info",
     CORS_ORIGIN: undefined,
     TRUST_PROXY: false,
     TRUSTED_PROXY_IPS: "",

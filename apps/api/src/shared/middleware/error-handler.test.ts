@@ -23,6 +23,7 @@ function buildApp(thrown: Error) {
   const app = new Hono<AppEnv>();
   app.use("*", async (c, next) => {
     c.set("logger", stubLogger);
+    c.set("requestId", "test-rid");
     return next();
   });
   app.get("/p", () => {
@@ -69,14 +70,18 @@ describe("errorHandler", () => {
     });
     expect(captured.length).toBe(1);
     expect(captured[0]!.msg).toBe("unhandled error");
+    const ctx = captured[0]!.ctx as Record<string, unknown>;
+    expect(ctx.requestId).toBe("test-rid");
+    expect(ctx.method).toBe("GET");
+    expect(ctx.path).toBe("/p");
   });
 });
 
 describe("errorHandler — an AppError wrapped by the query layer", () => {
   test("answers with the wrapped AppError's status, not 500", async () => {
     // drizzle wraps anything a driver throws in DrizzleQueryError, with the
-    // original on `.cause`. An AppError raised below the query layer — the
-    // write lock's DB_BUSY — must still reach the client as itself.
+    // original on `.cause`. An AppError raised below the query layer must
+    // still reach the client as itself.
     const wrapped = new Error("Failed query: INSERT INTO t VALUES (1)", {
       cause: new AppError("The database is busy. Try again shortly.", 503, "DB_BUSY"),
     });

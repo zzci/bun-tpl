@@ -41,6 +41,11 @@ export const configSchema = z.object({
   // When true, write logs to stdout instead of LOG_FILE — preferred for
   // container deployments that capture stdout/stderr at the runtime level.
   LOG_TO_STDOUT: z.enum(["true", "false"]).default("false").transform(v => v === "true"),
+  // Level of the per-request "request completed" access line for successful
+  // (2xx/3xx) responses. `debug` hides them under the default LOG_LEVEL=info;
+  // `silent` drops them entirely. Failure responses always log regardless:
+  // 5xx at `error`, 4xx at `warn`.
+  HTTP_LOG_LEVEL: z.enum(["debug", "info", "silent"]).default("info"),
   CORS_ORIGIN: z.string().optional(),
 
   // When true, honour the rightmost `X-Forwarded-For` entry (and, as a

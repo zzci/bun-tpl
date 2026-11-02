@@ -26,7 +26,9 @@ export function coarsenPath(path: string): string {
     .replace(RE_MIXED_TOKEN, "/:id");
 }
 
-export function loggingMiddleware() {
+export type HttpLogLevel = "debug" | "info" | "silent";
+
+export function loggingMiddleware(httpLogLevel: HttpLogLevel = "info") {
   return createMiddleware<AppEnv>(async (c, next) => {
     if (c.req.method === "OPTIONS" || SKIP_LOGGING_RE.test(c.req.path)) {
       return next();
@@ -39,13 +41,23 @@ export function loggingMiddleware() {
       const durationMs = performance.now() - start;
       const status = c.res.status;
       const route = coarsenPath(c.req.path);
-      c.get("logger").info({
-        method: c.req.method,
-        path: c.req.path,
-        status,
-        duration: Math.round(durationMs),
-        requestId: c.get("requestId"),
-      }, "request completed");
+      // Failures stay visible regardless of HTTP_LOG_LEVEL — expected errors
+      // (AppError, validation) are not logged anywhere else, so the access
+      // line is their only trace. Only 2xx/3xx lines are filterable.
+      const level = status >= 500
+        ? "error"
+        : status >= 400
+          ? "warn"
+          : httpLogLevel;
+      if (level !== "silent") {
+        c.get("logger")[level]({
+          method: c.req.method,
+          path: c.req.path,
+          status,
+          duration: Math.round(durationMs),
+          requestId: c.get("requestId"),
+        }, "request completed");
+      }
       // Skip /health + /metrics from prom output too — they would otherwise
       // dominate the histogram and dilute signal.
       if (!SKIP_METRICS_RE.test(c.req.path)) {

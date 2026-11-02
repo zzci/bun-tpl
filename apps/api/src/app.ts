@@ -161,7 +161,7 @@ function installCommonMiddleware(
     c.set("encryption", encryption);
     return next();
   });
-  api.use("*", loggingMiddleware());
+  api.use("*", loggingMiddleware(config.HTTP_LOG_LEVEL));
   api.use("*", csrfGuard);
   // Global policy enforcement: every route declared in any module's
   // `defineResource.routes` is auto-gated. Undeclared routes pass
@@ -296,7 +296,7 @@ export function buildRawApp(
     c.set("encryption", encryption);
     await next();
   });
-  raw.use("*", loggingMiddleware());
+  raw.use("*", loggingMiddleware(config.HTTP_LOG_LEVEL));
 
   // Keyed per client IP. Unknown paths count too, so probing for routes
   // spends the same budget as calling them.

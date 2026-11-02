@@ -1,3 +1,4 @@
+import type { HttpLogLevel } from "./logging";
 import type { Logger } from "@/shared/lib/logger";
 import type { AppEnv } from "@/shared/lib/types";
 import { describe, expect, test } from "bun:test";
@@ -5,18 +6,21 @@ import { Hono } from "hono";
 import { coarsenPath, loggingMiddleware } from "./logging";
 
 interface LogCall {
+  level: string;
   ctx: Record<string, unknown>;
   msg: string;
 }
 
-function buildApp(): { app: Hono<AppEnv>; calls: LogCall[] } {
+function buildApp(httpLogLevel?: HttpLogLevel): { app: Hono<AppEnv>; calls: LogCall[] } {
   const calls: LogCall[] = [];
+  const capture = (level: string) =>
+    (ctx: unknown, msg?: string) => calls.push({ level, ctx: ctx as Record<string, unknown>, msg: msg ?? "" });
   const stub: Logger = {
-    debug: () => {},
-    info: (ctx: unknown, msg?: string) => calls.push({ ctx: ctx as Record<string, unknown>, msg: msg ?? "" }),
-    warn: () => {},
-    error: () => {},
-    fatal: () => {},
+    debug: capture("debug"),
+    info: capture("info"),
+    warn: capture("warn"),
+    error: capture("error"),
+    fatal: capture("fatal"),
     flush: () => {},
   } as unknown as Logger;
 
@@ -26,8 +30,11 @@ function buildApp(): { app: Hono<AppEnv>; calls: LogCall[] } {
     c.set("requestId", "test-rid");
     return next();
   });
-  app.use("*", loggingMiddleware());
+  app.use("*", loggingMiddleware(httpLogLevel));
   app.get("/p", c => c.json({ ok: true }));
+  app.get("/missing", c => c.json({
+    error: { code: "NOT_FOUND", message: "x" },
+  }, 404));
   app.get("/api/health", c => c.json({ status: "ok" }));
   app.get("/api/health/ready", c => c.json({ status: "ready" }));
   app.options("/p", c => c.body(null, 204));
@@ -44,6 +51,7 @@ describe("loggingMiddleware", () => {
     expect(res.status).toBe(200);
     expect(calls.length).toBe(1);
     const c = calls[0]!;
+    expect(c.level).toBe("info");
     expect(c.msg).toBe("request completed");
     expect(c.ctx.method).toBe("GET");
     expect(c.ctx.path).toBe("/p");
@@ -71,11 +79,36 @@ describe("loggingMiddleware", () => {
     expect(calls.length).toBe(1);
     expect(calls[0]!.ctx.path).toBe("/boom");
   });
+
+  test("logs 4xx at warn and 5xx at error regardless of configured level", async () => {
+    for (const level of ["debug", "info", "silent"] as const) {
+      const { app, calls } = buildApp(level);
+      app.onError((_err, c) => c.json({
+        error: { code: "X", message: "x" },
+      }, 500));
+      await app.request("/missing");
+      await app.request("/boom");
+      expect(calls.map(c => c.level)).toEqual(["warn", "error"]);
+    }
+  });
+
+  test("httpLogLevel=debug writes success lines at debug", async () => {
+    const { app, calls } = buildApp("debug");
+    await app.request("/p");
+    expect(calls.length).toBe(1);
+    expect(calls[0]!.level).toBe("debug");
+  });
+
+  test("httpLogLevel=silent suppresses success lines", async () => {
+    const { app, calls } = buildApp("silent");
+    await app.request("/p");
+    expect(calls.length).toBe(0);
+  });
 });
 
 describe("coarsenPath", () => {
   test("preserves alphabetic route names", () => {
-    expect(coarsenPath("/api/encryption/challenge")).toBe("/api/encryption/challenge");
+    expect(coarsenPath("/api/system/health")).toBe("/api/system/health");
     expect(coarsenPath("/api/account/auth/callback")).toBe("/api/account/auth/callback");
     expect(coarsenPath("/api/cron/actions")).toBe("/api/cron/actions");
     expect(coarsenPath("/api/backup/import")).toBe("/api/backup/import");
@@ -103,7 +136,7 @@ describe("coarsenPath", () => {
 
   test("preserves all-alpha segments even when 8+ chars", () => {
     expect(coarsenPath("/api/something")).toBe("/api/something");
-    expect(coarsenPath("/api/encryption/challenge")).toBe("/api/encryption/challenge");
+    expect(coarsenPath("/api/account/auth/callback")).toBe("/api/account/auth/callback");
   });
 
   test("handles multiple replacements in one path", () => {

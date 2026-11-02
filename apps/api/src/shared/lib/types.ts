@@ -19,3 +19,14 @@ export interface AppEnv {
     user?: User;
   };
 }
+
+/**
+ * Structural constraint for any Hono env carrying the standard request
+ * `Variables`. Hono's `Context<E>` is invariant in `E` (its `set` accessor), so
+ * a helper annotated `Context<AppEnv>` rejects a sub-app whose env narrows a
+ * variable. Helpers that must run under several envs instead take `Context<E>`
+ * for `E extends RequestEnv`.
+ */
+export interface RequestEnv {
+  Variables: AppEnv["Variables"];
+}

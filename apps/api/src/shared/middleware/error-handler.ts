@@ -1,10 +1,13 @@
 import type { Context } from "hono";
 import type { ContentfulStatusCode } from "hono/utils/http-status";
-import type { AppEnv } from "@/shared/lib/types";
+import type { RequestEnv } from "@/shared/lib/types";
 import { ZodError } from "zod";
 import { findAppError, isConstraintViolation } from "@/shared/lib/errors";
 
-export function errorHandler(err: Error, c: Context<AppEnv>) {
+// Generic over `E extends RequestEnv` so the same handler attaches to both the
+// `AppEnv` outer app and `ProtectedEnv` sub-apps (Hono's `Context` is invariant
+// in its env, so a fixed `Context<AppEnv>` signature would reject the latter).
+export function errorHandler<E extends RequestEnv>(err: Error, c: Context<E>) {
   // Walk the cause chain: an AppError raised beneath a query arrives wrapped.
   const appError = findAppError(err);
   if (appError) {
@@ -35,7 +38,12 @@ export function errorHandler(err: Error, c: Context<AppEnv>) {
     }, 409);
   }
 
-  c.get("logger").error({ err }, "unhandled error");
+  c.get("logger").error({
+    err,
+    method: c.req.method,
+    path: c.req.path,
+    requestId: c.get("requestId"),
+  }, "unhandled error");
   return c.json({
     success: false,
     error: { code: "INTERNAL_ERROR", message: "Internal server error" },

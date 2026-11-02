@@ -16,6 +16,29 @@ afterEach(() => {
   rmSync(dir, { recursive: true, force: true });
 });
 
+// The pino file destination opens asynchronously (sonic-boom, sync:false), so a
+// single flush can race the open. Poll the observable outcome — flush, then
+// check the file — until the expected line lands, instead of guessing a fixed
+// delay that could under-wait on a loaded runner. Bounded so a real failure
+// still terminates and surfaces whatever content did land.
+async function flushUntil(log: { flush: () => void }, marker: string): Promise<string> {
+  for (let attempt = 0; attempt < 400; attempt++) {
+    log.flush();
+    if (existsSync(logFile)) {
+      const content = readFileSync(logFile, "utf-8");
+      if (content.includes(marker))
+        return content;
+    }
+    await new Promise<void>((resolve) => {
+      setTimeout(resolve, 5);
+    });
+  }
+  log.flush();
+  return existsSync(logFile)
+    ? readFileSync(logFile, "utf-8")
+    : "";
+}
+
 describe("createLogger", () => {
   test("creates the log directory and file on first write", async () => {
     const log = createLogger({
@@ -25,11 +48,24 @@ describe("createLogger", () => {
       NODE_ENV: "test",
     });
     log.info("hello");
-    await Bun.sleep(50);
-    log.flush();
+    const content = await flushUntil(log, "hello");
     expect(existsSync(logFile)).toBe(true);
-    const content = readFileSync(logFile, "utf-8");
     expect(content).toContain("hello");
+  });
+
+  test("sync destination writes through immediately without a flush race (CLI path)", () => {
+    // A sync logger opens its fd up front and writes synchronously, so the
+    // line is on disk without polling — and pino's exit-time flushSync cannot
+    // throw "sonic boom is not ready yet" against a not-yet-open async fd.
+    const log = createLogger({
+      LOG_LEVEL: "info",
+      LOG_FILE: logFile,
+      LOG_TO_STDOUT: false,
+      NODE_ENV: "test",
+    }, { sync: true });
+    log.info("sync-line");
+    expect(readFileSync(logFile, "utf-8")).toContain("sync-line");
+    expect(() => log.flush()).not.toThrow();
   });
 
   test("supports both string and object payloads", async () => {
@@ -41,9 +77,7 @@ describe("createLogger", () => {
     });
     log.info("string-form");
     log.info({ user: "alice" }, "with-context");
-    await Bun.sleep(50);
-    log.flush();
-    const content = readFileSync(logFile, "utf-8");
+    const content = await flushUntil(log, "with-context");
     expect(content).toContain("string-form");
     expect(content).toContain("with-context");
     expect(content).toContain("alice");
@@ -58,9 +92,7 @@ describe("createLogger", () => {
       NODE_ENV: "test",
     });
     log.info("fallback ok");
-    await Bun.sleep(50);
-    log.flush();
-    expect(readFileSync(logFile, "utf-8")).toContain("fallback ok");
+    expect(await flushUntil(log, "fallback ok")).toContain("fallback ok");
   });
 
   test("warn / error / fatal / debug all write to the file at their respective levels", async () => {
@@ -74,9 +106,7 @@ describe("createLogger", () => {
     log.warn("w");
     log.error({ x: 1 }, "e");
     log.fatal("f");
-    await Bun.sleep(50);
-    log.flush();
-    const content = readFileSync(logFile, "utf-8");
+    const content = await flushUntil(log, "\"f\"");
     expect(content).toContain("\"d\"");
     expect(content).toContain("\"w\"");
     expect(content).toContain("\"e\"");
@@ -94,9 +124,7 @@ describe("createLogger", () => {
       user: { password: "secret" },
       session: { token: "abc" },
     }, "redact-test");
-    await Bun.sleep(50);
-    log.flush();
-    const content = readFileSync(logFile, "utf-8");
+    const content = await flushUntil(log, "redact-test");
     expect(content).not.toContain("secret");
     expect(content).not.toContain("abc");
     expect(content).toContain("REDACTED");
@@ -123,9 +151,7 @@ describe("createLogger", () => {
       },
       "deep-redact-test",
     );
-    await Bun.sleep(50);
-    log.flush();
-    const content = readFileSync(logFile, "utf-8");
+    const content = await flushUntil(log, "deep-redact-test");
     expect(content).not.toContain("deep-secret-pw");
     expect(content).not.toContain("deep-secret-token");
     expect(content).toContain("REDACTED");

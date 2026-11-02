@@ -17,10 +17,13 @@ const RE_SESSION_COOKIE = RE_ANY_SESSION_COOKIE;
  *      origin. Combined with `SameSite=Lax` cookies (set by `auth.routes.ts`),
  *      this stops the standard CSRF vectors.
  *
- *   2. When `CORS_ORIGIN` is configured, the request must carry a matching
- *      `Origin` header (or a `Referer` whose origin matches). Missing both is
- *      treated as a rejection — closes the gap where a `Referrer-Policy:
- *      no-referrer` request would otherwise skip the origin check entirely.
+ *   2. When an allow-list can be built (from `CORS_ORIGIN`, falling back to
+ *      `APP_URL`), the request must carry a matching `Origin` header (or a
+ *      `Referer` whose origin matches). Missing both is treated as a
+ *      rejection — closes the gap where a `Referrer-Policy: no-referrer`
+ *      request would otherwise skip the origin check entirely. When no
+ *      allow-list can be built, production fails closed (rejects mutating
+ *      requests); dev stays permissive but logs a warning.
  *
  * Bearer-token requests are exempt (no cookie → no CSRF surface).
  */
@@ -57,18 +60,38 @@ export const csrfGuard = createMiddleware<AppEnv>(async (c, next) => {
   // (one host serves the SPA + API, CORS_ORIGIN intentionally unset).
   const config = c.get("config");
   const allowed = buildAllowedOrigins(config.CORS_ORIGIN, config.APP_URL);
-  if (allowed.length > 0) {
-    const origin = c.req.header("origin")
-      ?? c.req.header("referer")?.match(RE_ORIGIN_FROM_REFERER)?.[0];
-    if (!origin || !allowed.includes(origin)) {
+
+  // No allow-list could be built (neither CORS_ORIGIN nor APP_URL set). Fail
+  // closed in production — silently skipping the origin check there would
+  // degrade CSRF defense to the `X-Requested-With` header alone. In dev we
+  // stay permissive (no config is required to run locally) but log a warning.
+  if (allowed.length === 0) {
+    if (config.NODE_ENV === "production") {
       return c.json(
         {
           success: false,
-          error: { code: "CSRF_REJECTED", message: "Origin mismatch" },
+          error: { code: "CSRF_REJECTED", message: "Origin verification unavailable" },
         },
         403,
       );
     }
+    c.get("logger")?.warn(
+      { path: c.req.path, method: c.req.method },
+      "CSRF origin check skipped: set CORS_ORIGIN or APP_URL (permissive in dev only)",
+    );
+    return next();
+  }
+
+  const origin = c.req.header("origin")
+    ?? c.req.header("referer")?.match(RE_ORIGIN_FROM_REFERER)?.[0];
+  if (!origin || !allowed.includes(origin)) {
+    return c.json(
+      {
+        success: false,
+        error: { code: "CSRF_REJECTED", message: "Origin mismatch" },
+      },
+      403,
+    );
   }
 
   return next();

@@ -1,6 +1,5 @@
 import type { AppEnv } from "@/shared/lib/types";
-import { Buffer } from "node:buffer";
-import { timingSafeEqual } from "node:crypto";
+import { createHash, timingSafeEqual } from "node:crypto";
 import { createMiddleware } from "hono/factory";
 
 export type ServiceTokenScope = "metrics" | "backup";
@@ -38,9 +37,13 @@ export function serviceTokenRequired(scope: ServiceTokenScope) {
       );
     }
 
-    const a = Buffer.from(supplied);
-    const b = Buffer.from(expected);
-    if (a.length !== b.length || !timingSafeEqual(a, b)) {
+    // Hash both sides to a fixed 32-byte digest before the constant-time
+    // compare. A raw `a.length !== b.length` short-circuit would leak the
+    // configured token's length; hashing normalises the width so the check
+    // is length-independent. Mirrors the PAT comparison path.
+    const a = createHash("sha256").update(supplied).digest();
+    const b = createHash("sha256").update(expected).digest();
+    if (!timingSafeEqual(a, b)) {
       return c.json(
         {
           success: false,

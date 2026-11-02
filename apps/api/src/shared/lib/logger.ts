@@ -157,7 +157,20 @@ function createMethod(
   };
 }
 
-export function createLogger(config: LoggerConfig) {
+export interface CreateLoggerOptions {
+  /**
+   * Use a SYNCHRONOUS destination. Short-lived CLI subcommands
+   * (`withRuntime`) `process.exit()` immediately after finishing, and pino's
+   * on-exit auto-flush calls `SonicBoom.flushSync()` — which throws "sonic
+   * boom is not ready yet" when the async fd has not finished opening. A sync
+   * destination opens the fd up front, so the exit-time flush is safe. The
+   * long-lived server keeps the default async destination (better throughput;
+   * it flushes on its graceful-shutdown path).
+   */
+  readonly sync?: boolean;
+}
+
+export function createLogger(config: LoggerConfig, opts: CreateLoggerOptions = {}) {
   const level = VALID_LEVELS.has(config.LOG_LEVEL)
     ? config.LOG_LEVEL
     : "info";
@@ -184,12 +197,19 @@ export function createLogger(config: LoggerConfig) {
   if (hasFs && !config.LOG_TO_STDOUT)
     mkdirSync(dirname(config.LOG_FILE), { recursive: true });
 
+  // Async (buffered) for the long-lived server; synchronous for short-lived
+  // CLI runs so the exit-time flush cannot race the fd open (see opts.sync).
+  const sync = opts.sync ?? false;
   const dest: pino.DestinationStream = hasFs
-    ? pino.destination(
-        config.LOG_TO_STDOUT
-          ? { dest: 1, sync: false, minLength: 4096 }
-          : { dest: config.LOG_FILE, sync: false, minLength: 4096 },
-      )
+    ? pino.destination({
+        dest: config.LOG_TO_STDOUT
+          ? 1
+          : config.LOG_FILE,
+        sync,
+        ...sync
+          ? {}
+          : { minLength: 4096 },
+      })
 
     : {
         write: (line: string) => console.log(line.trimEnd()),
