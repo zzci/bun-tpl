@@ -34,11 +34,22 @@ describe("rateLimit", () => {
   });
 
   test("expired window allows fresh requests again", async () => {
-    const app = buildApp({ windowMs: 1, max: 1, bucket: "t3" });
-    expect((await app.request("/p")).status).toBe(200);
-    // Wait for the 1ms window to elapse.
-    await Bun.sleep(10);
-    expect((await app.request("/p")).status).toBe(200);
+    // Control the clock instead of racing a 1ms window against a real sleep.
+    // The first hit stamps `resetAt = now + windowMs`; advancing the fake clock
+    // past it makes expiry deterministic regardless of runner load.
+    const realNow = Date.now;
+    let clock = 1_000_000;
+    Date.now = () => clock;
+    try {
+      const app = buildApp({ windowMs: 1000, max: 1, bucket: "t3" });
+      expect((await app.request("/p")).status).toBe(200);
+      // Advance past the window so the bucket has expired.
+      clock += 1001;
+      expect((await app.request("/p")).status).toBe(200);
+    }
+    finally {
+      Date.now = realNow;
+    }
   });
 
   test("buckets are isolated by name", async () => {

@@ -338,7 +338,11 @@ jobs:
             # Low enough for the suite to reach in a short burst. The shipped
             # default is 60 a minute, which would take more requests to prove
             # than the property is worth.
-            echo "CREATE_RATE_LIMIT_PER_MINUTE = \"10\""
+            echo "CREATE_RATE_LIMIT_PER_MINUTE_DB = \"10\""
+            # The smoke case proves the database quota; keep the in-memory
+            # create budget out of its way so it cannot trip first.
+            echo "CREATE_RATE_LIMIT_PER_MINUTE_MEMORY = \"0\""
+            echo "CREATE_RATE_LIMIT_PER_HOUR_MEMORY = \"0\""
             if [ -n "${CUSTOM_DOMAIN:-}" ]; then
               # In production the app refuses to guess its own origin from
               # forwarded headers, and the CSRF guard has nothing to compare

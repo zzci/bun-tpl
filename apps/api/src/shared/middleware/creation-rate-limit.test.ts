@@ -44,8 +44,8 @@ function buildApp(limits: Limits, userId: string | null = "user-1") {
   app.use("*", async (c, next) => {
     c.set("db", db);
     c.set("config", {
-      CREATE_RATE_LIMIT_PER_MINUTE: limits.perMinute,
-      CREATE_RATE_LIMIT_PER_HOUR: limits.perHour,
+      CREATE_RATE_LIMIT_PER_MINUTE_DB: limits.perMinute,
+      CREATE_RATE_LIMIT_PER_HOUR_DB: limits.perHour,
       CREATE_RATE_LIMIT_EXEMPT: limits.exempt ?? [],
     } as unknown as AppEnv["Variables"]["config"]);
     if (userId !== null)

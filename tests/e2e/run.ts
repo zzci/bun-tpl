@@ -154,8 +154,14 @@ function spawnApi(dataDir: string): Subprocess {
       // rejected everything must still fail the suite) but well clear of the
       // burst a fast functional run produces. The throttle's own behaviour is
       // covered by its unit tests and the workers smoke suite.
-      CREATE_RATE_LIMIT_PER_MINUTE: "1000",
-      CREATE_RATE_LIMIT_PER_HOUR: "10000",
+      CREATE_RATE_LIMIT_PER_MINUTE_DB: "1000",
+      CREATE_RATE_LIMIT_PER_HOUR_DB: "10000",
+      // The in-memory write limits are off: the suite drives one admin actor
+      // far past any human pace. Their unit tests cover them.
+      CREATE_RATE_LIMIT_PER_MINUTE_MEMORY: "0",
+      CREATE_RATE_LIMIT_PER_HOUR_MEMORY: "0",
+      WRITE_RATE_LIMIT_PER_MINUTE: "0",
+      BULK_WRITE_RATE_LIMIT_PER_MINUTE: "0",
       // Cron defaults to off; the orchestrator's e2e suite covers the
       // catalog routes, so flip it on for every API spawn.
       CRON_ENABLED: "true",

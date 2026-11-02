@@ -12,7 +12,7 @@ import { index, integer, sqliteTable, text } from "drizzle-orm/sqlite-core";
  * and reset the window at will.
  *
  * This table backs the limiter that does need to survive that:
- * `shared/middleware/user-rate-limit.ts`, keyed per user. Cardinality is
+ * `shared/middleware/creation-rate-limit.ts`, keyed per user. Cardinality is
  * bounded by users × buckets, and a key is overwritten in place on its next
  * request, so expired rows are reused rather than accumulating — no sweep.
  *
@@ -21,7 +21,7 @@ import { index, integer, sqliteTable, text } from "drizzle-orm/sqlite-core";
  * counter into a live system would be wrong.
  */
 export const rateLimits = sqliteTable("rate_limits", {
-  /** `<bucket>:<subject>` — see `userRateLimit`. */
+  /** `<bucket>:<subject>` — see `creationRateLimit`. */
   key: text("key").primaryKey(),
   /** Requests counted in the current window, including rejected ones. */
   count: integer("count").notNull().default(0),

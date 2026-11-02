@@ -1,3 +1,4 @@
+import type { Context } from "hono";
 import type { KvNamespace } from "@/platform";
 import type { AppEnv } from "@/shared/lib/types";
 import { createMiddleware } from "hono/factory";
@@ -55,7 +56,7 @@ function getBucket(name: string): KvNamespace {
  *
  * This is the single implementation of the in-memory fixed-window counter.
  * Route handlers that need to gate part of their work (the auth flow, the
- * encryption unlock flow) call it directly; `rateLimit()` below wraps it as
+ * write limiter) call it directly; `rateLimit()` below wraps it as
  * middleware. Having one implementation means one eviction policy and one
  * behaviour on every runtime.
  *
@@ -104,18 +105,22 @@ export function rateLimit(opts: RateLimitOptions) {
   return createMiddleware<AppEnv>(async (c, next) => {
     const key = getClientIp(c, c.var.config) ?? "anon";
     const retryAfter = await consumeRateLimit({ bucket, key, windowMs, max });
-    if (retryAfter > 0) {
-      c.header("Retry-After", String(retryAfter));
-      return c.json(
-        {
-          success: false,
-          error: { code: "RATE_LIMITED", message: "Too many requests. Try again later." },
-        },
-        429,
-      );
-    }
+    if (retryAfter > 0)
+      return rateLimited(c, retryAfter);
     return next();
   });
+}
+
+/** The shared 429 envelope: `Retry-After` plus the `RATE_LIMITED` error code. */
+export function rateLimited(c: Context<AppEnv>, retryAfterSeconds: number): Response {
+  c.header("Retry-After", String(retryAfterSeconds));
+  return c.json(
+    {
+      success: false,
+      error: { code: "RATE_LIMITED", message: "Too many requests. Try again later." },
+    },
+    429,
+  );
 }
 
 /**

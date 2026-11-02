@@ -15,6 +15,7 @@ import { settingsRoutes } from "@/modules/settings";
 // catches the case where the system gets re-locked at runtime (e.g. master
 // key rotation) before this app instance is rebuilt.
 import { requireUnlocked } from "@/shared/middleware/encryption";
+import { writeRateLimit } from "@/shared/middleware/write-rate-limit";
 // Side-effect import: the `item` module ships no HTTP routes; it registers
 // its backup contribution and the `item_attachment` file permission hook at
 // load time.
@@ -24,6 +25,9 @@ export function protectedRoutes() {
   const app = new Hono<AppEnv>();
 
   app.use("*", requireUnlocked);
+  // Per-actor write frequency cap, in memory. The durable per-resource
+  // creation quota is mounted globally in app.ts.
+  app.use("*", writeRateLimit());
 
   app.route("/", accountRoutes());
   app.route("/", issueRoutes());

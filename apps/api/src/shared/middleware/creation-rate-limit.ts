@@ -97,9 +97,9 @@ export interface CreationRateLimitOptions {
  * out of the rest of the app. `CREATE_RATE_LIMIT_EXEMPT` lists resources to
  * leave alone.
  *
- * Two windows are enforced together: `CREATE_RATE_LIMIT_PER_MINUTE` bounds a
- * burst, and `CREATE_RATE_LIMIT_PER_HOUR` bounds the sustained rate a burst
- * limit alone would still allow. Either at `0` disables that window.
+ * Two windows are enforced together: `CREATE_RATE_LIMIT_PER_MINUTE_DB`
+ * bounds a burst, and `CREATE_RATE_LIMIT_PER_HOUR_DB` bounds the sustained
+ * rate a burst limit alone would still allow. Either at `0` disables that window.
  * Rejected requests keep counting, so sustained abuse escalates out of the
  * minute window into the hour one rather than settling into a comfortable
  * rhythm just under the burst cap.
@@ -141,8 +141,8 @@ export function creationRateLimit(options: CreationRateLimitOptions) {
       return next();
 
     const windows = ([
-      { name: "minute", ms: MINUTE_MS, max: config.CREATE_RATE_LIMIT_PER_MINUTE },
-      { name: "hour", ms: HOUR_MS, max: config.CREATE_RATE_LIMIT_PER_HOUR },
+      { name: "minute", ms: MINUTE_MS, max: config.CREATE_RATE_LIMIT_PER_MINUTE_DB },
+      { name: "hour", ms: HOUR_MS, max: config.CREATE_RATE_LIMIT_PER_HOUR_DB },
     ] satisfies Window[]).filter(w => w.max > 0);
     if (windows.length === 0)
       return next();

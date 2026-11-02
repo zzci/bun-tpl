@@ -152,8 +152,28 @@ export const configSchema = z.object({
   // so they survive a restart. The minute window bounds a burst; the hour
   // window bounds the sustained rate a burst limit alone would still allow.
   // Either at 0 disables that window.
-  CREATE_RATE_LIMIT_PER_MINUTE: z.coerce.number().int().nonnegative().default(60),
-  CREATE_RATE_LIMIT_PER_HOUR: z.coerce.number().int().nonnegative().default(600),
+  CREATE_RATE_LIMIT_PER_MINUTE_DB: z.coerce.number().int().nonnegative().default(60),
+  CREATE_RATE_LIMIT_PER_HOUR_DB: z.coerce.number().int().nonnegative().default(600),
+
+  // ─── Write rate limits ───────────────────────────────────────────────
+  // Per-actor frequency caps on mutating protected routes, keyed by user id
+  // (client IP when no session resolves). Reads are never counted. Any knob at
+  // 0 disables its bucket. State is in-memory, so each replica carries its own
+  // budget and a restart clears the counters.
+  //
+  // Content creation (issues, documents, comments). 30/min is one new record
+  // every two seconds — an order of magnitude faster than filling a create
+  // dialog — and the hourly ceiling bounds the total a runaway client can
+  // mint even while staying under the per-minute budget.
+  CREATE_RATE_LIMIT_PER_MINUTE_MEMORY: z.coerce.number().int().nonnegative().default(30),
+  CREATE_RATE_LIMIT_PER_HOUR_MEMORY: z.coerce.number().int().nonnegative().default(300),
+  // Everything else that mutates: PATCH/PUT/DELETE and action POSTs. Has to
+  // clear routine editing, where a detail panel patches one field per request.
+  WRITE_RATE_LIMIT_PER_MINUTE: z.coerce.number().int().nonnegative().default(60),
+  // Upload / bulk surfaces (/backup, attachments), where one human gesture
+  // legitimately issues many requests. Frequency is the secondary defence
+  // here; MAX_UPLOAD_BYTES and UPLOADS_TOTAL_BYTES are the primary one.
+  BULK_WRITE_RATE_LIMIT_PER_MINUTE: z.coerce.number().int().nonnegative().default(600),
 
   // Per-client cap on the raw API (`${BASE_PATH}/api/raw/*`), the bare surface
   // other services integrate with. Counted per IP in a one-minute window.

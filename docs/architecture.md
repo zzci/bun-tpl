@@ -187,7 +187,8 @@ group:dev-team#member@user:user123
 
 ## Rate Limiting
 
-Two limiters, chosen by whether the window has to outlive the process.
+Three limiters, chosen by who is keyed and whether the window has to
+outlive the process.
 
 **In-memory, IP-keyed** — `shared/middleware/rate-limit.ts`, backed by the
 platform key/value seam. Free per request, so it suits short windows on
@@ -222,8 +223,8 @@ one module cannot lock a user out of the rest of the app. All three
 attachment endpoints land on `attachment` because they create the same kind
 of thing. `CREATE_RATE_LIMIT_EXEMPT` lists resources to leave alone.
 
-Two windows apply together. `CREATE_RATE_LIMIT_PER_MINUTE` bounds a burst;
-`CREATE_RATE_LIMIT_PER_HOUR` bounds the sustained rate that a burst limit
+Two windows apply together. `CREATE_RATE_LIMIT_PER_MINUTE_DB` bounds a burst;
+`CREATE_RATE_LIMIT_PER_HOUR_DB` bounds the sustained rate that a burst limit
 alone would still allow — at 60/minute, an unbounded hour is 3600 creates.
 Rejected requests keep counting, so a caller hammering the minute limit
 escalates into the hour window instead of settling into a comfortable rhythm
@@ -251,6 +252,18 @@ PKCE key and the request-scoped policy cache.
 
 Keying on the user id bounds the table to users × resources × windows, one
 row each, overwritten in place, so no sweep is needed.
+
+**In-memory, actor-keyed** — `shared/middleware/write-rate-limit.ts`, mounted
+in `routes/protected.ts`. A frequency cap on every mutating protected request,
+keyed by user id (client IP when no session resolves), in three budgets:
+`create` (`CREATE_RATE_LIMIT_PER_MINUTE_MEMORY` and
+`CREATE_RATE_LIMIT_PER_HOUR_MEMORY`), `write-bulk`
+(`BULK_WRITE_RATE_LIMIT_PER_MINUTE`, uploads and backup) and `write`
+(`WRITE_RATE_LIMIT_PER_MINUTE`, everything else). Unlike the creation quota
+it covers edits and deletes too, and its budgets span resources. Which paths
+are bulk or create is listed in `write-rate-limit.paths.ts`, the one file a
+downstream app edits for its own modules. Any knob at `0` disables its
+bucket.
 
 Login has a third control that is neither: `auth_lockouts` records failures
 per username in the database, which is what actually stops credential

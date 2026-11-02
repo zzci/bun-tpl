@@ -13,6 +13,14 @@ each upstream tag; your fork's `Unreleased` block sits at the top.
 
 ### Added
 
+- Per-actor write frequency caps in memory (`shared/middleware/write-rate-limit.ts`),
+  on every mutating protected request: `CREATE_RATE_LIMIT_PER_MINUTE_MEMORY`
+  (30) and `CREATE_RATE_LIMIT_PER_HOUR_MEMORY` (300) for content creation,
+  `BULK_WRITE_RATE_LIMIT_PER_MINUTE` (600) for uploads and backup, and
+  `WRITE_RATE_LIMIT_PER_MINUTE` (60) for everything else. Keyed by user id,
+  client IP when no session resolves. Any knob at `0` disables its bucket. A
+  downstream app lists its own bulk and create paths in
+  `write-rate-limit.paths.ts`. `rateLimited()` is the shared 429 envelope.
 - `HTTP_LOG_LEVEL` (`debug` / `info` / `silent`, default `info`) sets the
   level of the per-request access line for 2xx/3xx responses. 4xx lines are
   always logged at `warn` and 5xx at `error`, whatever the setting.
@@ -22,6 +30,12 @@ each upstream tag; your fork's `Unreleased` block sits at the top.
 
 ### Changed
 
+- **Breaking:** the durable creation quota's `CREATE_RATE_LIMIT_PER_MINUTE` /
+  `CREATE_RATE_LIMIT_PER_HOUR` are renamed `CREATE_RATE_LIMIT_PER_MINUTE_DB` /
+  `CREATE_RATE_LIMIT_PER_HOUR_DB` (same meaning and defaults), to tell them
+  apart from the new in-memory `_MEMORY` budgets. The old names are no longer
+  read; a deployment that set them must rename them, or it falls back to the
+  defaults (60/min, 600/h).
 - Behind `TRUST_PROXY=true`, `CF-Connecting-IP` / `True-Client-IP` now take
   priority over `X-Forwarded-For` when resolving the client IP, so a
   Cloudflare → reverse proxy → app chain sees the visitor, not the edge.
