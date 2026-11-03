@@ -13,6 +13,9 @@ each upstream tag; your fork's `Unreleased` block sits at the top.
 
 ### Added
 
+- `jsonPaged(item, desc?, meta?)` takes a page meta schema (default the new
+  exported `pageMetaSchema`); `jsonRequestBody(schema)` documents a body read
+  inline; `errors()` labels `410`.
 - Per-actor write frequency caps in memory (`shared/middleware/write-rate-limit.ts`),
   on every mutating protected request: `CREATE_RATE_LIMIT_PER_MINUTE_MEMORY`
   (30) and `CREATE_RATE_LIMIT_PER_HOUR_MEMORY` (300) for content creation,

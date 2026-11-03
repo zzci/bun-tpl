@@ -88,10 +88,11 @@ that builds `/openapi.json` only collects routes carrying `describeRoute`.
    |---|---|
    | `jsonOk(data?, desc?)` | `200 { success: true, data }` |
    | `jsonCreated(data?, desc?)` | `201 { success: true, data }` |
-   | `jsonPaged(item, desc?)` | `200 { success: true, data: item[], meta }` |
+   | `jsonPaged(item, desc?, meta?)` | `200 { success: true, data: item[], meta }`; `meta` defaults to `pageMetaSchema` — pass `pageMetaSchema.extend(...)` when the runtime meta carries more |
    | `noContent(desc?)` | `204` |
    | `raw(status, mediaType, desc)` | non-JSON (text/binary/redirect) |
-   | `errors(...codes)` | error envelope per status (400/401/403/404/409/413/422/429/500/503) |
+   | `errors(...codes)` | error envelope per status (400/401/403/404/409/410/413/422/429/500/503) |
+   | `jsonRequestBody(schema)` | `requestBody` doc for a route that reads its body inline instead of through `validator` |
 
    `data` defaults to `z.unknown()` — pass a small Zod schema (often mirroring
    the Drizzle row) when the precise shape is worth documenting. Define it once

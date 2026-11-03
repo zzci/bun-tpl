@@ -129,18 +129,24 @@ function json(schema: ZodType) {
   };
 }
 
-function successEnvelope(data: ZodType, withMeta = false) {
+/**
+ * The canonical paginated-list `meta` (`{ total, page, limit }`). A module
+ * whose runtime meta carries extra fields extends it
+ * (`pageMetaSchema.extend(...)`) and passes the result to `jsonPaged`, so the
+ * spec keeps matching the wire.
+ */
+export const pageMetaSchema = z.object({
+  total: z.number(),
+  page: z.number(),
+  limit: z.number(),
+});
+
+function successEnvelope(data: ZodType, meta?: ZodType) {
   const shape = {
     success: z.literal(true),
     data,
-    ...(withMeta
-      ? {
-          meta: z.object({
-            total: z.number(),
-            page: z.number(),
-            limit: z.number(),
-          }),
-        }
+    ...(meta
+      ? { meta }
       : {}),
   };
   return z.object(shape);
@@ -166,12 +172,12 @@ export function jsonCreated(data: ZodType = z.unknown(), description = "Created"
   };
 }
 
-/** `200` with `{ success: true, data: T[], meta }`. */
-export function jsonPaged(item: ZodType, description = "Paged list"): ResponsesMap {
+/** `200` with `{ success: true, data: T[], meta }`; `meta` defaults to `pageMetaSchema`. */
+export function jsonPaged(item: ZodType, description = "Paged list", meta: ZodType = pageMetaSchema): ResponsesMap {
   return {
     200: {
       description,
-      content: json(successEnvelope(z.array(item), true)),
+      content: json(successEnvelope(z.array(item), meta)),
     },
   };
 }
@@ -189,6 +195,7 @@ const ERROR_DESCRIPTIONS: Partial<Record<number, string>> = {
   403: "Forbidden",
   404: "Not found",
   409: "Conflict",
+  410: "Gone",
   413: "Payload too large",
   422: "Validation failed",
   429: "Too many requests",
@@ -214,6 +221,26 @@ export function raw(status: StatusCode, mediaType: string, description: string):
     [status as number]: {
       description,
       content: { [mediaType]: {} },
+    },
+  };
+}
+
+/**
+ * A `describeRoute` `requestBody` documenting `schema` as JSON, for routes
+ * that read their body inline rather than through `validator` — `resolver()`
+ * is not honoured in the `requestBody` position (only in `responses`), so a
+ * concrete JSON Schema is emitted instead. Doc-only: it changes no runtime
+ * behaviour.
+ */
+type RequestBody = Extract<NonNullable<Parameters<typeof describeRoute>[0]["requestBody"]>, { content: unknown }>;
+type JsonSchemaObject = NonNullable<NonNullable<RequestBody["content"][string]>["schema"]>;
+
+export function jsonRequestBody(schema: ZodType): RequestBody {
+  const body = z.toJSONSchema(schema) as Record<string, unknown>;
+  delete body.$schema; // redundant inside an OpenAPI Schema Object
+  return {
+    content: {
+      "application/json": { schema: body as JsonSchemaObject },
     },
   };
 }
