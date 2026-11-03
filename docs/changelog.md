@@ -72,6 +72,12 @@ each upstream tag; your fork's `Unreleased` block sits at the top.
 
 ### Security
 
+- `seroval` / `seroval-plugins` 1.6.7 → 1.7.7 (within `@tanstack/router-core`'s
+  `^1.6.7`) for GHSA-7rv5-mrxv-xcr9, GHSA-97r2-qh9m-474h, GHSA-wp97-x4hv-qvhp,
+  GHSA-9wx9-5pv9-3349 and GHSA-f86p-h4j2-7qgj. Lockfile only.
+- `minimatch` 10 (GHSA-g3hv-75wg-m249) is accepted in `osv-scanner.toml`
+  until 2027-01-10: the fix is 11.0.1, which none of its consumers (the
+  eslint toolchain, lint-time only) accepts yet.
 - **Breaking for proxied production deploys:** with `TRUST_PROXY=true` and an
   empty `TRUSTED_PROXY_IPS`, production now ignores forwarding headers and
   uses the socket peer, so a direct caller cannot forge its IP. Set

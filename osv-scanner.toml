@@ -9,3 +9,12 @@
 id = "GHSA-238p-pmpm-9mq7"
 ignoreUntil = 2027-01-10
 reason = "Dev-only (eslint markdown plugin) copy of katex 0.16; low severity"
+
+# minimatch 10.x (GHSA-g3hv-75wg-m249, ReDoS via globparts amplification): the
+# fix is 11.0.1, but every consumer here (eslint, @eslint/config-array,
+# @typescript-eslint/typescript-estree) still asks for ^10 and no 10.x fix
+# exists. Lint-time only; the patterns it matches come from our own config.
+[[IgnoredVulns]]
+id = "GHSA-g3hv-75wg-m249"
+ignoreUntil = 2027-01-10
+reason = "Dev-only (eslint toolchain) minimatch 10; fix only in 11, which eslint does not accept yet"
