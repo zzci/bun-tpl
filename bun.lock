@@ -19,7 +19,7 @@
     },
     "apps/api": {
       "name": "@app/api",
-      "version": "0.2.0",
+      "version": "0.3.0",
       "dependencies": {
         "@app/shared": "workspace:*",
         "@libsql/client": "0.18.0",
@@ -48,7 +48,7 @@
     },
     "apps/web": {
       "name": "@app/web",
-      "version": "0.2.0",
+      "version": "0.3.0",
       "dependencies": {
         "@app/shared": "workspace:*",
         "@base-ui/react": "1.9.0",
@@ -90,7 +90,7 @@
     },
     "packages/shared": {
       "name": "@app/shared",
-      "version": "0.2.0",
+      "version": "0.3.0",
       "dependencies": {
         "@noble/secp256k1": "3.2.0",
       },
@@ -103,7 +103,7 @@
     },
     "packages/tsconfig": {
       "name": "@app/tsconfig",
-      "version": "0.2.0",
+      "version": "0.3.0",
     },
   },
   "overrides": {

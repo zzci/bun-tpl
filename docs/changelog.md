@@ -11,6 +11,8 @@ each upstream tag; your fork's `Unreleased` block sits at the top.
 
 ## Unreleased
 
+## v0.3.0 — 2026-11-04
+
 ### Added
 
 - `jsonPaged(item, desc?, meta?)` takes a page meta schema (default the new
