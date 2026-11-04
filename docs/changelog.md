@@ -64,6 +64,9 @@ each upstream tag; your fork's `Unreleased` block sits at the top.
 
 ### Fixed
 
+- The About tab's rollout history lists the newest entries first and shows
+  the latest five, with a toggle for the rest. lode records history oldest
+  first, so the card used to show the ten oldest and hide recent releases.
 - Shutdown drains in-flight requests before closing connections. It used to
   call `server.stop(true)` first, which closed active connections at once and
   made the 25-second grace period a no-op.

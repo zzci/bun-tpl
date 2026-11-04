@@ -515,8 +515,16 @@ function Banner({ tone, icon, text, children }: { readonly tone: "primary" | "am
   );
 }
 
+// lode records history oldest first; show the latest few, newest first.
+const HISTORY_PREVIEW = 5;
+
 function HistorySection({ entries }: { readonly entries: readonly LodeHistoryEntry[] }) {
   const { t } = useTranslation("settings");
+  const [expanded, setExpanded] = useState(false);
+  const newestFirst = [...entries].reverse();
+  const shown = expanded
+    ? newestFirst
+    : newestFirst.slice(0, HISTORY_PREVIEW);
   return (
     <div className="rounded-lg border">
       <div className="flex items-center gap-1.5 border-b px-3 py-2 text-sm font-medium">
@@ -524,7 +532,7 @@ function HistorySection({ entries }: { readonly entries: readonly LodeHistoryEnt
         {t("about.lode.history")}
       </div>
       <div className="divide-y">
-        {entries.slice(0, 10).map(e => (
+        {shown.map(e => (
           <div key={`${e.version}@${e.at}`} className="flex items-center justify-between gap-2 px-3 py-2 text-sm">
             <span className="font-mono">{e.version}</span>
             <span className="flex items-center gap-2">
@@ -544,6 +552,15 @@ function HistorySection({ entries }: { readonly entries: readonly LodeHistoryEnt
           </div>
         ))}
       </div>
+      {newestFirst.length > HISTORY_PREVIEW && (
+        <div className="border-t px-3 py-1.5">
+          <Button type="button" variant="ghost" size="sm" onClick={() => setExpanded(v => !v)}>
+            {expanded
+              ? t("about.lode.historyCollapse")
+              : t("about.lode.historyShowAll", { count: newestFirst.length })}
+          </Button>
+        </div>
+      )}
     </div>
   );
 }

@@ -82,6 +82,8 @@
       "history": "发布历史",
       "historyGood": "正常",
       "historyBad": "异常",
+      "historyShowAll": "显示全部（{{count}}）",
+      "historyCollapse": "收起",
       "restart": "重启",
       "checkUpdates": "检查更新",
       "checking": "检查中…",

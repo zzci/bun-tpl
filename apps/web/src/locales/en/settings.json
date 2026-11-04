@@ -82,6 +82,8 @@
       "history": "Rollout history",
       "historyGood": "good",
       "historyBad": "bad",
+      "historyShowAll": "Show all ({{count}})",
+      "historyCollapse": "Show less",
       "restart": "Restart",
       "checkUpdates": "Check for updates",
       "checking": "Checking…",
