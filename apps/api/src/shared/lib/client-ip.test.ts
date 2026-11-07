@@ -194,7 +194,7 @@ describe("getClientIp (Cloudflare CF-Connecting-IP / True-Client-IP)", () => {
             IP: { address: "172.20.0.2" },
           },
         ),
-        { TRUST_PROXY: true, TRUSTED_PROXY_IPS: "172.16.0.0/12" },
+        { TRUST_PROXY: true, TRUST_CLOUDFLARE_HEADERS: true, TRUSTED_PROXY_IPS: "172.16.0.0/12" },
       ),
     ).toBe("203.0.113.5");
   });
@@ -205,9 +205,25 @@ describe("getClientIp (Cloudflare CF-Connecting-IP / True-Client-IP)", () => {
         ctx({ "true-client-ip": "198.51.100.7", "x-forwarded-for": "162.158.1.1" }, {
           IP: { address: "10.0.0.2" },
         }),
-        { TRUST_PROXY: true, TRUSTED_PROXY_IPS: "10.0.0.0/8" },
+        { TRUST_PROXY: true, TRUST_CLOUDFLARE_HEADERS: true, TRUSTED_PROXY_IPS: "10.0.0.0/8" },
       ),
     ).toBe("198.51.100.7");
+  });
+
+  test("CF headers are ignored unless TRUST_CLOUDFLARE_HEADERS is set", () => {
+    // Origin reachable around Cloudflare: Traefik forwards a client-supplied
+    // CF-Connecting-IP verbatim, but appends the real source to XFF.
+    expect(
+      getClientIp(
+        ctx(
+          { "x-forwarded-for": "198.51.100.9", "cf-connecting-ip": "203.0.113.5", "true-client-ip": "203.0.113.6" },
+          {
+            IP: { address: "172.20.0.2" },
+          },
+        ),
+        { TRUST_PROXY: true, TRUSTED_PROXY_IPS: "172.16.0.0/12" },
+      ),
+    ).toBe("198.51.100.9");
   });
 
   test("CF-Connecting-IP from an UNtrusted peer is ignored (anti-spoof)", () => {

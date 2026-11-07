@@ -174,6 +174,18 @@ TRUST_PROXY=true
 TRUSTED_PROXY_IPS=10.0.0.0/8,172.16.0.0/12
 ```
 
+### Cloudflare in front of the proxy
+
+Behind Cloudflare → reverse proxy → app, the rightmost `X-Forwarded-For`
+entry is the Cloudflare edge, not the visitor. Set
+`TRUST_CLOUDFLARE_HEADERS=true` to make `CF-Connecting-IP` /
+`True-Client-IP` take priority. Do this **only** when the origin accepts
+traffic from Cloudflare alone (firewall limited to Cloudflare's IP ranges, or
+Cloudflare Tunnel). `TRUSTED_PROXY_IPS` vouches only for the proxy: a caller
+who reaches the proxy around Cloudflare can send its own `CF-Connecting-IP`,
+which proxies such as Traefik forward unchanged, and so dodge per-IP limits
+and forge audit IPs.
+
 > **Security warning.** If you set `TRUST_PROXY=true` while the API is also reachable directly (port exposed on the host, alternate ingress, etc.) without `TRUSTED_PROXY_IPS`, an attacker can spoof `X-Forwarded-For` to bypass per-IP rate limits and poison audit log attribution. Either keep the API exclusively behind the proxy (no direct exposure), set `TRUSTED_PROXY_IPS` to the proxy subnet, or leave `TRUST_PROXY` at the default.
 
 ## Production compose addendum

@@ -11,6 +11,15 @@ each upstream tag; your fork's `Unreleased` block sits at the top.
 
 ## Unreleased
 
+### Security
+
+- `CF-Connecting-IP` / `True-Client-IP` are read only with the new
+  `TRUST_CLOUDFLARE_HEADERS=true` (default `false`). A caller reaching the
+  trusted proxy around Cloudflare could set them and spoof its client IP.
+  **Breaking for Cloudflare deploys:** set the flag once the origin accepts
+  Cloudflare traffic only, or the client IP falls back to the rightmost
+  `X-Forwarded-For` entry (the Cloudflare edge).
+
 ## v0.3.0 — 2026-11-04
 
 ### Added

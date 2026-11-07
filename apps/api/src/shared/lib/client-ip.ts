@@ -6,6 +6,7 @@ const RE_BAD_PEER = /^(?:unknown|::)$/i;
 
 interface ClientIpConfig {
   readonly TRUST_PROXY: boolean;
+  readonly TRUST_CLOUDFLARE_HEADERS?: boolean;
   readonly TRUSTED_PROXY_IPS?: string;
   readonly NODE_ENV?: "development" | "production" | "test";
 }
@@ -21,7 +22,8 @@ interface ClientIpConfig {
  * When `TRUST_PROXY=true` the function resolves the client IP from forwarding
  * headers, in priority order: `CF-Connecting-IP` / `True-Client-IP` (Cloudflare's
  * real-visitor headers — authoritative behind a Cloudflare → proxy chain such
- * as Cloudflare → Traefik → app), then the rightmost entry of
+ * as Cloudflare → Traefik → app; read only with `TRUST_CLOUDFLARE_HEADERS=true`),
+ * then the rightmost entry of
  * `X-Forwarded-For` (the hop closest to our process), then `X-Real-IP` as a
  * last fallback. Cloudflare's headers win because XFF's rightmost entry is the
  * Cloudflare edge IP and `X-Real-IP` is the immediate upstream — neither is the
@@ -82,13 +84,17 @@ export function getClientIp(c: Context, config: ClientIpConfig): string {
   // to the real visitor IP. Behind a Cloudflare → reverse-proxy chain
   // (e.g. Cloudflare → Traefik → app) this is the authoritative client IP:
   // XFF's right-most entry is the Cloudflare *edge* IP and `X-Real-IP` is the
-  // immediate upstream, neither of which is the end user. Honoured only on
-  // this trusted path (the peer was gated above), so a caller reaching the
-  // process directly cannot forge it.
-  for (const header of ["cf-connecting-ip", "true-client-ip"] as const) {
-    const value = lowered[header]?.trim();
-    if (value && !isSentinel(value))
-      return value;
+  // immediate upstream, neither of which is the end user. Gated behind
+  // `TRUST_CLOUDFLARE_HEADERS` because the peer gate above only vouches for
+  // the proxy: a caller who reaches that proxy around Cloudflare can set this
+  // header, and proxies such as Traefik forward it verbatim (unlike XFF,
+  // where they append the real source on the right).
+  if (config.TRUST_CLOUDFLARE_HEADERS) {
+    for (const header of ["cf-connecting-ip", "true-client-ip"] as const) {
+      const value = lowered[header]?.trim();
+      if (value && !isSentinel(value))
+        return value;
+    }
   }
 
   // Prefer XFF (right-most). The rightmost hop is the one our trusted

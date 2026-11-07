@@ -39,6 +39,7 @@ function baseConfig(overrides: Partial<Config> = {}): Config {
     HTTP_LOG_LEVEL: "info",
     CORS_ORIGIN: undefined,
     TRUST_PROXY: false,
+    TRUST_CLOUDFLARE_HEADERS: false,
     TRUSTED_PROXY_IPS: "",
     ENABLE_EXPERIMENTAL_DEK_ROTATION: false,
     CRON_ENABLED: false,

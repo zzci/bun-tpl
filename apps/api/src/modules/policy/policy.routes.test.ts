@@ -44,6 +44,7 @@ function baseConfig(): Config {
     LOG_TO_STDOUT: false,
     CORS_ORIGIN: undefined,
     TRUST_PROXY: false,
+    TRUST_CLOUDFLARE_HEADERS: false,
     TRUSTED_PROXY_IPS: "",
     ENABLE_EXPERIMENTAL_DEK_ROTATION: false,
     CRON_ENABLED: false,
