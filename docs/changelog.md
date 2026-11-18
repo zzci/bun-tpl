@@ -24,6 +24,8 @@ each upstream tag; your fork's `Unreleased` block sits at the top.
 
 ### Security
 
+- `hono` 4.13.14 → 4.13.19 for GHSA-3gg2-335m-rxc6, GHSA-46wx-v44x-9hh2,
+  GHSA-4h7h-rv7c-7m2v, GHSA-4m76-xfj5-7975 and GHSA-h7mg-cq63-vhpq.
 - `CF-Connecting-IP` / `True-Client-IP` are read only with the new
   `TRUST_CLOUDFLARE_HEADERS=true` (default `false`). A caller reaching the
   trusted proxy around Cloudflare could set them and spoof its client IP.
