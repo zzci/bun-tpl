@@ -11,6 +11,17 @@ each upstream tag; your fork's `Unreleased` block sits at the top.
 
 ## Unreleased
 
+### Added
+
+- One brand colour drives the accent palette: `--brand` in
+  `apps/web/src/index.css` (any CSS colour, default `#1447e6`, the previous
+  primary). Primary, sidebar accent, chart colours and the in-app logo
+  gradient take its hue and chroma at fixed lightness steps per mode, via CSS
+  relative colour syntax (Chrome 119+, Safari 16.4+, Firefox 128+).
+  `bun run rebrand --color <hex>` sets it and recomputes the favicon
+  gradient, which cannot read CSS. The default look is unchanged except the
+  logo, which moves from indigo to the primary blue.
+
 ### Security
 
 - `CF-Connecting-IP` / `True-Client-IP` are read only with the new

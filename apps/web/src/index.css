@@ -49,14 +49,24 @@
 }
 
 :root {
+  /* Brand colour — the one value to change to match a logo. Any CSS colour
+     works (hex, rgb(), oklch()). Primary, sidebar, chart and logo colours
+     below take its hue and chroma at fixed lightness steps, so text contrast
+     holds in light and dark mode. Needs CSS relative colour syntax (Chrome
+     119+, Safari 16.4+, Firefox 128+). The favicon (public/logo.svg) cannot
+     read CSS; `bun run rebrand --color <hex>` updates both. */
+  --brand: #1447e6;
+  --logo-from: oklch(from var(--brand) 0.68 calc(c * 0.78) h);
+  --logo-via: oklch(from var(--brand) 0.585 c h);
+  --logo-to: oklch(from var(--brand) 0.457 calc(c * 1.05) h);
   --background: oklch(1 0 0);
   --foreground: oklch(0.145 0 0);
   --card: oklch(1 0 0);
   --card-foreground: oklch(0.145 0 0);
   --popover: oklch(1 0 0);
   --popover-foreground: oklch(0.145 0 0);
-  --primary: oklch(0.488 0.243 264.376);
-  --primary-foreground: oklch(0.97 0.014 254.604);
+  --primary: oklch(from var(--brand) 0.488 c h);
+  --primary-foreground: oklch(from var(--brand) 0.97 0.014 h);
   --secondary: oklch(0.967 0.001 286.375);
   --secondary-foreground: oklch(0.21 0.006 285.885);
   --muted: oklch(0.97 0 0);
@@ -67,16 +77,16 @@
   --border: oklch(0.922 0 0);
   --input: oklch(0.922 0 0);
   --ring: oklch(0.708 0 0);
-  --chart-1: oklch(0.785 0.115 274.713);
-  --chart-2: oklch(0.585 0.233 277.117);
-  --chart-3: oklch(0.511 0.262 276.966);
-  --chart-4: oklch(0.457 0.24 277.023);
-  --chart-5: oklch(0.398 0.195 277.366);
+  --chart-1: oklch(from var(--brand) 0.785 calc(c * 0.47) h);
+  --chart-2: oklch(from var(--brand) 0.585 calc(c * 0.96) h);
+  --chart-3: oklch(from var(--brand) 0.511 calc(c * 1.08) h);
+  --chart-4: oklch(from var(--brand) 0.457 calc(c * 0.99) h);
+  --chart-5: oklch(from var(--brand) 0.398 calc(c * 0.8) h);
   --radius: 0.45rem;
   --sidebar: oklch(0.985 0 0);
   --sidebar-foreground: oklch(0.145 0 0);
-  --sidebar-primary: oklch(0.546 0.245 262.881);
-  --sidebar-primary-foreground: oklch(0.97 0.014 254.604);
+  --sidebar-primary: oklch(from var(--brand) 0.546 c h);
+  --sidebar-primary-foreground: oklch(from var(--brand) 0.97 0.014 h);
   --sidebar-accent: oklch(0.97 0 0);
   --sidebar-accent-foreground: oklch(0.205 0 0);
   --sidebar-border: oklch(0.922 0 0);
@@ -90,8 +100,8 @@
   --card-foreground: oklch(0.985 0 0);
   --popover: oklch(0.205 0 0);
   --popover-foreground: oklch(0.985 0 0);
-  --primary: oklch(0.424 0.199 265.638);
-  --primary-foreground: oklch(0.97 0.014 254.604);
+  --primary: oklch(from var(--brand) 0.424 calc(c * 0.82) h);
+  --primary-foreground: oklch(from var(--brand) 0.97 0.014 h);
   --secondary: oklch(0.274 0.006 286.033);
   --secondary-foreground: oklch(0.985 0 0);
   --muted: oklch(0.269 0 0);
@@ -102,15 +112,15 @@
   --border: oklch(1 0 0 / 10%);
   --input: oklch(1 0 0 / 15%);
   --ring: oklch(0.556 0 0);
-  --chart-1: oklch(0.785 0.115 274.713);
-  --chart-2: oklch(0.585 0.233 277.117);
-  --chart-3: oklch(0.511 0.262 276.966);
-  --chart-4: oklch(0.457 0.24 277.023);
-  --chart-5: oklch(0.398 0.195 277.366);
+  --chart-1: oklch(from var(--brand) 0.785 calc(c * 0.47) h);
+  --chart-2: oklch(from var(--brand) 0.585 calc(c * 0.96) h);
+  --chart-3: oklch(from var(--brand) 0.511 calc(c * 1.08) h);
+  --chart-4: oklch(from var(--brand) 0.457 calc(c * 0.99) h);
+  --chart-5: oklch(from var(--brand) 0.398 calc(c * 0.8) h);
   --sidebar: oklch(0.205 0 0);
   --sidebar-foreground: oklch(0.985 0 0);
-  --sidebar-primary: oklch(0.623 0.214 259.815);
-  --sidebar-primary-foreground: oklch(0.97 0.014 254.604);
+  --sidebar-primary: oklch(from var(--brand) 0.623 calc(c * 0.88) h);
+  --sidebar-primary-foreground: oklch(from var(--brand) 0.97 0.014 h);
   --sidebar-accent: oklch(0.269 0 0);
   --sidebar-accent-foreground: oklch(0.985 0 0);
   --sidebar-border: oklch(1 0 0 / 10%);

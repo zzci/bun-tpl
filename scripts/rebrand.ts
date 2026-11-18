@@ -1,20 +1,21 @@
 #!/usr/bin/env bun
 // One-shot rebrand helper. Rewrites .env defaults and every package.json
 // (top-level + apps/* + packages/*). Optional --scope renames the @app/*
-// package scope. Prints manual follow-ups it can't do safely (git remote,
+// package scope; optional --color sets the brand colour (CSS + favicon). Prints manual follow-ups it can't do safely (git remote,
 // logo, lockfile regen).
 //
 // Usage:
 //   bun scripts/rebrand.ts \
 //     --name myapp --display "My App" \
 //     [--scope myorg] [--repo https://github.com/myorg/myapp] \
-//     [--description "Internal tools for myorg"] [--dry-run]
+//     [--description "Internal tools for myorg"] [--color "#e11d48"] [--dry-run]
 /* eslint-disable no-console */
 import { Glob } from "bun";
 import { readFileSync, writeFileSync } from "node:fs";
 import { resolve } from "node:path";
 import process from "node:process";
 import { parseArgs } from "node:util";
+import { logoStops, parseHex } from "./lib/color";
 
 const { values: cli } = parseArgs({
   args: process.argv.slice(2),
@@ -24,6 +25,7 @@ const { values: cli } = parseArgs({
     "scope": { type: "string" },
     "repo": { type: "string" },
     "description": { type: "string" },
+    "color": { type: "string" },
     "dry-run": { type: "boolean", default: false },
     "help": { type: "boolean", default: false },
   },
@@ -31,10 +33,10 @@ const { values: cli } = parseArgs({
   allowPositionals: false,
 });
 
-if (cli.help || (!cli.name && !cli.display && !cli.scope && !cli.repo && !cli.description)) {
+if (cli.help || (!cli.name && !cli.display && !cli.scope && !cli.repo && !cli.description && !cli.color)) {
   console.log(
     "Usage: bun scripts/rebrand.ts --name <slug> --display \"<Display Name>\" "
-    + "[--scope <packageScope>] [--repo <git-url>] [--description <text>] [--dry-run]",
+    + "[--scope <packageScope>] [--repo <git-url>] [--description <text>] [--color <hex>] [--dry-run]",
   );
   process.exit(cli.help ? 0 : 1);
 }
@@ -45,6 +47,9 @@ const SCOPE = cli.scope?.replace(/^@/, "");
 const REPO_URL = cli.repo;
 const DESCRIPTION = cli.description;
 const DRY_RUN = !!cli["dry-run"];
+const BRAND_COLOR = cli.color === undefined
+  ? undefined
+  : parseHex(cli.color);
 
 const RE_NAME = /^[a-z][a-z0-9-]*$/;
 if (APP_NAME && !RE_NAME.test(APP_NAME)) {
@@ -53,6 +58,11 @@ if (APP_NAME && !RE_NAME.test(APP_NAME)) {
 }
 if (SCOPE && !RE_NAME.test(SCOPE)) {
   console.error(`--scope must match /^[a-z][a-z0-9-]*/, got "${SCOPE}"`);
+  process.exit(1);
+}
+
+if (cli.color !== undefined && !BRAND_COLOR) {
+  console.error(`--color must be a hex colour (#rgb or #rrggbb), got "${cli.color}"`);
   process.exit(1);
 }
 
@@ -330,6 +340,37 @@ function rewriteReadme(): void {
 }
 rewriteReadme();
 
+// ─── 1f. Brand colour ───
+// The SPA palette derives from `--brand` in index.css; the favicon cannot
+// read CSS, so its gradient stops are computed from the same colour.
+function rewriteBrandColor(): void {
+  if (!BRAND_COLOR)
+    return;
+  const cssRel = "apps/web/src/index.css";
+  const css = readFileSync(resolve(ROOT, cssRel), "utf-8");
+  const nextCss = css.replace(/^([ \t]*--brand:[ \t]*)[^\s;][^;]*;/m, `$1${BRAND_COLOR};`);
+  if (nextCss !== css)
+    write(cssRel, nextCss, `set --brand to ${BRAND_COLOR}`);
+
+  const svgRel = "apps/web/public/logo.svg";
+  let svg: string;
+  try {
+    svg = readFileSync(resolve(ROOT, svgRel), "utf-8");
+  }
+  catch {
+    return;
+  }
+  const stops = logoStops(BRAND_COLOR);
+  let i = 0;
+  const nextSvg = svg.replace(/(<stop [^>]*stop-color=")[^"]*(")/g, (match, pre: string, post: string) =>
+    i < stops.length
+      ? `${pre}${stops[i++]}${post}`
+      : match);
+  if (nextSvg !== svg)
+    write(svgRel, nextSvg, `set favicon gradient to ${stops.join(" / ")}`);
+}
+rewriteBrandColor();
+
 // ─── 2. package.json files ───
 const manifestGlobs = ["package.json", "apps/*/package.json", "packages/*/package.json"];
 const manifests: string[] = [];
@@ -396,6 +437,8 @@ console.log("\n[rebrand] manual follow-up:");
 console.log("  - git remote set-url origin <your-fork-url>");
 console.log("  - Replace apps/web/public/logo.svg with your logo");
 console.log("  - Update the inline SVG in apps/web/src/shared/components/logo.tsx");
+if (!BRAND_COLOR)
+  console.log("  - Set the brand colour: --color <hex>, or --brand in apps/web/src/index.css");
 console.log("  - bun run check # verify lint + typecheck + test + build still pass");
 
 // A package-scope rename leaves bun.lock referencing the old `@app/*`

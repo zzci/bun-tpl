@@ -8,6 +8,10 @@ interface LogoProps {
 /**
  * Shield-keyhole brand mark. Replace this component to rebrand.
  *
+ * The gradient follows `--brand` through `--logo-from/via/to` (index.css);
+ * the stop colour goes through `style` because the `stopColor` attribute does
+ * not resolve `var()`.
+ *
  * The gradient `id` is generated per instance via `useId()` so that
  * multiple `<Logo>` on the same page (e.g. one in the expanded sidebar
  * header, one in the collapsed toggle) don't collide. A literal id
@@ -30,9 +34,9 @@ export function Logo({ className }: LogoProps) {
     >
       <defs>
         <linearGradient id={gradientId} x1="16" y1="8" x2="112" y2="120" gradientUnits="userSpaceOnUse">
-          <stop offset="0%" stopColor="#818cf8" />
-          <stop offset="50%" stopColor="#6366f1" />
-          <stop offset="100%" stopColor="#4338ca" />
+          <stop offset="0%" style={{ stopColor: "var(--logo-from)" }} />
+          <stop offset="50%" style={{ stopColor: "var(--logo-via)" }} />
+          <stop offset="100%" style={{ stopColor: "var(--logo-to)" }} />
         </linearGradient>
       </defs>
       <path
